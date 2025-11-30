@@ -1,0 +1,8 @@
+data/
+*.parquet
+*.xlsx
+*.csv
+*.xls
+*.json
+/secrets.toml
+.env

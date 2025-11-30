@@ -1,0 +1,305 @@
+info_por_cidade = {
+    "QUEIMADAS": """
+
+        <b>Regional:</b> 15a GRE<br>
+        <b>Município:</b> QUEIMADAS - PB<br>
+        <b>Endereço:</b> RUA JOAQUIM BARBOSA DA SILVA, 78<br>
+        <b>Bairro:</b> CENTRO<br>
+        <b>CEP:</b> 58475000<br>
+        <b>Andar:</b> 1o ANDAR<br>
+        <b>Escada/Elevador:</b> ESCADA<br>
+        <b>Ponto de carga/descarga:</b> SIM<br>
+        <b>Restrição de horário:</b> 08H AS 16H<br>
+        <b>Responsável:</b> RUBENICE MACEDO DA SILVA<br>
+        <b>Telefone 1:</b> 83991541560<br>
+        <b>Telefone 2:</b> 83991666635.0<br>
+        <b>Email:</b> rubenice.silva054@gre.pb.gov.br<br>
+        <b>Restrições:</b> 24/09/2025 -Feriado Municipal
+
+""",
+
+"CUITÉ": """
+
+        <b>Regional:</b> 4a GRE<br>
+        <b>Município:</b> CUITE - PB<br>
+        <b>Endereço:</b> JOSE CASSIMIRO DANTAS, 643<br>
+        <b>Bairro:</b> NOVO RETIRO<br>
+        <b>CEP:</b> 58175000<br>
+        <b>Andar:</b> TERREO<br>
+        <b>Escada/Elevador:</b> NAO<br>
+        <b>Ponto de carga/descarga:</b> SIM<br>
+        <b>Restrição de horário:</b> 08H AS 16H30<br>
+        <b>Responsável:</b> MARIA DAS MERCES SOARES DE OLIVEIRA-SEYZA<br>
+        <b>Telefone 1:</b> 83999891007<br>
+        <b>Telefone 2:</b> 83999277434.0<br>
+        <b>Email:</b> maria.smoliveira@professor.pb.gov.br<br>
+        <b>Restrições:</b> 24/09/2025 -Feriado Municipal
+
+""",
+
+"GUARABIRA": """
+
+        <b>Regional:</b> 2a GRE<br>
+        <b>Município:</b> GUARABIRA - PB<br>
+        <b>Endereço:</b> RUA DOUTOR SALES, 30<br>
+        <b>Bairro:</b> CENTRO<br>
+        <b>CEP:</b> 58200000<br>
+        <b>Andar:</b> 1o ANDAR<br>
+        <b>Escada/Elevador:</b> ESCADA<br>
+        <b>Ponto de carga/descarga:</b> SIM<br>
+        <b>Restrição de horário:</b> 08H AS 16H30<br>
+        <b>Responsável:</b> CAMILO VICENTE PEREIRA ou JUAN NUNES FERNANDES<br>
+        <b>Telefone 1:</b> 83999427058<br>
+        <b>Telefone 2:</b> 83991287198.0<br>
+        <b>Email:</b> camilo_pereira100@professor.pb.gov.br<br>
+        <b>Restrições:</b> Não informado
+
+""",
+
+"ITABAIANA": """
+
+        <b>Regional:</b> 12a GRE<br>
+        <b>Município:</b> ITABAIANA - PB<br>
+        <b>Endereço:</b> Av. Presidente Joao Pessoa, 345<br>
+        <b>Bairro:</b> CENTRO<br>
+        <b>CEP:</b> 58360000<br>
+        <b>Andar:</b> TERREO<br>
+        <b>Escada/Elevador:</b> NAO<br>
+        <b>Ponto de carga/descarga:</b> SIM<br>
+        <b>Restrição de horário:</b> 08H AS 16H30<br>
+        <b>Responsável:</b> LUANA GABRIELA MARTINIANO S MENDONCA ou AGAILSON ANDRADE DA SILVA<br>
+        <b>Telefone 1:</b> 83998948440<br>
+        <b>Telefone 2:</b> 83981425372.0<br>
+        <b>Email:</b> luanasilva@see.pb.gov.br<br>
+        <b>Restrições:</b> 20/11 - Consciencia Negra
+
+""",
+
+"CAMPINA GRANDE": """
+
+        <b>Regional:</b> 3a GRE<br>
+        <b>Município:</b> CAMPINA GRANDE - PB<br>
+        <b>Endereço:</b> Rua Nivaldo Henriques de Oliveira, s/n<br>
+        <b>Bairro:</b> MALVINAS<br>
+        <b>CEP:</b> 58432560<br>
+        <b>Andar:</b> TERREO<br>
+        <b>Escada/Elevador:</b> ESCADA<br>
+        <b>Ponto de carga/descarga:</b> SIM<br>
+        <b>Restrição de horário:</b> 08:00 AS 16:30<br>
+        <b>Responsável:</b> LUCIENE FABRIZIA ALVES<br>
+        <b>Telefone 1:</b> 83986928722<br>
+        <b>Telefone 2:</b> Não informado<br>
+        <b>Email:</b> valber@see.pb.gov.br<br>
+        <b>Restrições:</b> Não informado
+
+""",
+
+"CATOLÉ DO ROCHA": """
+
+        <b>Regional:</b> 8aGRE<br>
+        <b>Município:</b> CATOLE DO ROCHA - PB<br>
+        <b>Endereço:</b> Rua manoel Alves Maia, 94<br>
+        <b>Bairro:</b> Centro<br>
+        <b>CEP:</b> 58884000<br>
+        <b>Andar:</b> Terreo<br>
+        <b>Escada/Elevador:</b> Nao<br>
+        <b>Ponto de carga/descarga:</b> Sim<br>
+        <b>Restrição de horário:</b> 08:00 AS 16:30<br>
+        <b>Responsável:</b> Nayara Karlla Montenegro de Carvalho<br>
+        <b>Telefone 1:</b> 83998571666<br>
+        <b>Telefone 2:</b> 83999266438.0<br>
+        <b>Email:</b> nayarakm@see.pb.gov.br<br>
+        <b>Restrições:</b> Não informado
+
+""",
+
+"MAMANGUAPE": """
+
+        <b>Regional:</b> 14aGRE<br>
+        <b>Município:</b> MAMANGUAPE - PB<br>
+        <b>Endereço:</b> Rua Inacio da Costa de Farias, 1445<br>
+        <b>Bairro:</b> Cidade nova<br>
+        <b>CEP:</b> 58280000<br>
+        <b>Andar:</b> TERREO<br>
+        <b>Escada/Elevador:</b> NAO<br>
+        <b>Ponto de carga/descarga:</b> SIM<br>
+        <b>Restrição de horário:</b> 08:00 AS 16:30<br>
+        <b>Responsável:</b> Carmem Mabel de Moura Nascimento<br>
+        <b>Telefone 1:</b> 83987345040<br>
+        <b>Telefone 2:</b> Não informado<br>
+        <b>Email:</b> carmemmabel.14gre@see.pb.gov.br<br>
+        <b>Restrições:</b> Não informado
+
+""",
+
+"JOÃO PESSOA": """
+
+        <b>Regional:</b> 1a GRE<br>
+        <b>Município:</b> JOAO PESSOA - PB<br>
+        <b>Endereço:</b> Rua Corenel  Benevenute da Costa, s/n<br>
+        <b>Bairro:</b> Bairro<br>
+        <b>CEP:</b> 58056230<br>
+        <b>Andar:</b> 1o andar<br>
+        <b>Escada/Elevador:</b> NAO<br>
+        <b>Ponto de carga/descarga:</b> SIM<br>
+        <b>Restrição de horário:</b> 08:00 AS 16:30<br>
+        <b>Responsável:</b> Rossana Alvares da Silva Andrade<br>
+        <b>Telefone 1:</b> 83986971813<br>
+        <b>Telefone 2:</b> 83996627282.0<br>
+        <b>Email:</b> rossana.andrade@see.pb.gov.br<br>
+        <b>Restrições:</b> Não informado
+
+""",
+
+"SOUSA": """
+
+        <b>Regional:</b> 10a GRE<br>
+        <b>Município:</b> SOUSA - PB<br>
+        <b>Endereço:</b> RUA DEP. JOSE DE PAIVA GADLEHA, 123<br>
+        <b>Bairro:</b> GATO PRETO<br>
+        <b>CEP:</b> 58801620<br>
+        <b>Andar:</b> TERREO<br>
+        <b>Escada/Elevador:</b> NAO<br>
+        <b>Ponto de carga/descarga:</b> SIM<br>
+        <b>Restrição de horário:</b> 08H AS 16H<br>
+        <b>Responsável:</b> Joao Alexandre Celeste de Sousa<br>
+        <b>Telefone 1:</b> 83994002182<br>
+        <b>Telefone 2:</b> 83981312769.0<br>
+        <b>Email:</b> joao.celeste@gre.pb.gov.br<br>
+        <b>Restrições:</b> 20/11 - Consciencia Negra
+
+""",
+
+"SANTA RITA": """
+
+        <b>Regional:</b> 16a GRE<br>
+        <b>Município:</b> SANTA RITA - PB<br>
+        <b>Endereço:</b> Rua Sao Pedro, 383<br>
+        <b>Bairro:</b> Bairro Popular<br>
+        <b>CEP:</b> 58301250<br>
+        <b>Andar:</b> Terreo<br>
+        <b>Escada/Elevador:</b> Nao<br>
+        <b>Ponto de carga/descarga:</b> Sim Escola Técnica Municipal Maria da Penha Costa<br>
+        <b>Restrição de horário:</b> 08:00 as 16:30<br>
+        <b>Responsável:</b> Gylheverton Fernandes de Souza Silva<br>
+        <b>Telefone 1:</b> 83991891121<br>
+        <b>Telefone 2:</b> 83998630370.0<br>
+        <b>Email:</b> gylheverton.silva@professor.pb.gov.br<br>
+        <b>Restrições:</b> 22 de maio - feriado municipal
+
+""",
+
+"MONTEIRO": """
+
+        <b>Regional:</b> 5o GRE<br>
+        <b>Município:</b> MONTEIRO - PB<br>
+        <b>Endereço:</b> Avenida Olimpio Gomes, 376<br>
+        <b>Bairro:</b> Centro<br>
+        <b>CEP:</b> 58500000<br>
+        <b>Andar:</b> Terreo<br>
+        <b>Escada/Elevador:</b> Nao<br>
+        <b>Ponto de carga/descarga:</b> Sim<br>
+        <b>Restrição de horário:</b> 08:00 as 16:30<br>
+        <b>Responsável:</b> Joao Marcos Almeida Ferreira<br>
+        <b>Telefone 1:</b> 83998628728<br>
+        <b>Telefone 2:</b> 83996331628.0<br>
+        <b>Email:</b> joao.ferreira@see.pb.gov.br<br>
+        <b>Restrições:</b> 28/07 - feriado municipal
+
+""",
+
+"PATOS": """
+
+        <b>Regional:</b> 6a GRE<br>
+        <b>Município:</b> PATOS - PB<br>
+        <b>Endereço:</b> Rua Escritor Rui Barbosa, 614<br>
+        <b>Bairro:</b> Centro<br>
+        <b>CEP:</b> 58700060<br>
+        <b>Andar:</b> Terreo<br>
+        <b>Escada/Elevador:</b> Nao<br>
+        <b>Ponto de carga/descarga:</b> Sim<br>
+        <b>Restrição de horário:</b> 08:00 as 16:30<br>
+        <b>Responsável:</b> Antonio Fernandes Suassuna<br>
+        <b>Telefone 1:</b> 83996546198<br>
+        <b>Telefone 2:</b> 83999615349.0<br>
+        <b>Email:</b> antonio.suassuna@escola.pb.gov.br<br>
+        <b>Restrições:</b> 24/09 - Feriado municipal
+
+""",
+
+"PRINCESA ISABEL": """
+
+        <b>Regional:</b> 11a GRE<br>
+        <b>Município:</b> PRINCESA ISABEL - PB<br>
+        <b>Endereço:</b> TRAVRSSA FRANCISCO VANDERLEY, S/N<br>
+        <b>Bairro:</b> CENTRO<br>
+        <b>CEP:</b> 58755000<br>
+        <b>Andar:</b> TERREO<br>
+        <b>Escada/Elevador:</b> NAO<br>
+        <b>Ponto de carga/descarga:</b> SIM<br>
+        <b>Restrição de horário:</b> 08:00 AS 16:30 HS<br>
+        <b>Responsável:</b> JONATAS DE OLIVEIRA DE LIMA<br>
+        <b>Telefone 1:</b> 83999158048<br>
+        <b>Telefone 2:</b> 83996215091.0<br>
+        <b>Email:</b> jonatas.lima0686@escola.pb.gov.br<br>
+        <b>Restrições:</b> 20/11 - Consciencia Negra e 26/11 EMACIPACAO POLITICA
+
+""",
+
+"ITAPORANGA": """
+
+        <b>Regional:</b> 7a GRE<br>
+        <b>Município:</b> ITAPORANGA - PB<br>
+        <b>Endereço:</b> MANOEL MOREIRA DANTAS, 26<br>
+        <b>Bairro:</b> JOAO SILVINO<br>
+        <b>CEP:</b> 58780000<br>
+        <b>Andar:</b> TERREO<br>
+        <b>Escada/Elevador:</b> NAO<br>
+        <b>Ponto de carga/descarga:</b> SIM<br>
+        <b>Restrição de horário:</b> 08:00 AS 16:30<br>
+        <b>Responsável:</b> DILVANIA DANTAS GOMES OU MANOEL DE ARAUJO L. JUNIOR<br>
+        <b>Telefone 1:</b> 83999830224<br>
+        <b>Telefone 2:</b> 83999700161.0<br>
+        <b>Email:</b> dilvania.gomes@gre.pb.gov.br<br>
+        <b>Restrições:</b> Não informado
+
+""",
+
+"CAJAZEIRAS": """
+
+        <b>Regional:</b> 9a GRE<br>
+        <b>Município:</b> CAJAZEIRAS - PB<br>
+        <b>Endereço:</b> AVENIDA JULIO MARQUES DO NASCIMENTO, 449<br>
+        <b>Bairro:</b> JARDIM OASIS<br>
+        <b>CEP:</b> 58900000<br>
+        <b>Andar:</b> TERREO<br>
+        <b>Escada/Elevador:</b> NAO<br>
+        <b>Ponto de carga/descarga:</b> SIM<br>
+        <b>Restrição de horário:</b> 08:00 as 16:30<br>
+        <b>Responsável:</b> WIGNA NIBEGNA ASSIS DE ALMEIDA OU CRISTINA BATISTA DE ANDRADE<br>
+        <b>Telefone 1:</b> 83999471678<br>
+        <b>Telefone 2:</b> 83991297801.0<br>
+        <b>Email:</b> wigna@see.pb.gov.br<br>
+        <b>Restrições:</b> 22|08 Feriado Municipal e 15|09 Feriado Municipal
+
+""",
+
+"POMBAL": """
+
+        <b>Regional:</b> 13a GRE<br>
+        <b>Município:</b> POMBAL - PB<br>
+        <b>Endereço:</b> Rua Prof Luiz ferreira Campos, SN<br>
+        <b>Bairro:</b> Jardim Rogerio<br>
+        <b>CEP:</b> 58840000<br>
+        <b>Andar:</b> Terreo<br>
+        <b>Escada/Elevador:</b> Nao<br>
+        <b>Ponto de carga/descarga:</b> Sim<br>
+        <b>Restrição de horário:</b> 08:00 as 16:30<br>
+        <b>Responsável:</b> Karla Karen Alves<br>
+        <b>Telefone 1:</b> 83999705514<br>
+        <b>Telefone 2:</b> 83996910936.0<br>
+        <b>Email:</b> maria.rodrigues21@professor.pb.gov.br<br>
+        <b>Restrições:</b> Não informado
+
+"""
+}
