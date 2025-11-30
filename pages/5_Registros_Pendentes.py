@@ -1,12 +1,12 @@
 import unicodedata
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from src.data_paths import DATA_ORIGEM, ARQ_TURMAS_GRE
+from src.data_paths import ARQ_TURMAS_GRE
 
 SENHA_CORRETA = "A9C3B"
 PENDENTES_PATTERN = "Registros_Pendentes-*.xlsx"
@@ -166,8 +166,8 @@ def descobrir_colunas(df: pd.DataFrame) -> dict[str, str]:
 
 
 def localizar_arquivo_padrao() -> Path | None:
-    arquivos = sorted(DATA_ORIGEM.glob(PENDENTES_PATTERN))
-    return arquivos[-1] if arquivos else None
+    lista = sorted(PASTA.glob("Registros_Pendentes-*.xlsx"))
+    return lista[-1] if lista else None
 
 
 @st.cache_data(show_spinner=False)
@@ -176,13 +176,6 @@ def carregar_planilha(path: str) -> pd.DataFrame:
 
 
 def carregar_df_pendentes(uploaded_file) -> tuple[pd.DataFrame | None, str | None]:
-    if uploaded_file is not None:
-        try:
-            df = pd.read_excel(uploaded_file)
-            return df, uploaded_file.name
-        except Exception as exc:
-            st.error(f"Falha ao ler o arquivo enviado: {exc}")
-            return None, uploaded_file.name
     arquivo_padrao = localizar_arquivo_padrao()
     if arquivo_padrao is None:
         st.warning("Nenhum arquivo Registros_Pendentes-*.xlsx foi encontrado em data/origem.")
@@ -324,17 +317,34 @@ def obter_colunas_para_tabela(df: pd.DataFrame, col_map: dict[str, str]) -> list
 
 st.title("Registros Pendentes - SIAVE 2025")
 
-from src.utils import get_latest_file, parse_timestamp_from_filename, format_timestamp_brazil
+uploaded_file = st.file_uploader("Envie o arquivo de Registros Pendentes (.xlsx)", type=["xlsx"])
 
-PASTA_RP = "data/origem/Registros_Pendentes"
-prefixo = "Registros_Pendentes"
+from pathlib import Path
+import os
 
-arquivo_recente = get_latest_file(PASTA_RP, prefixo)
+PASTA = Path("data/origem/Registros_Pendentes")
+PASTA.mkdir(parents=True, exist_ok=True)
+
+if uploaded_file:
+    nome_arquivo = PASTA / uploaded_file.name
+
+    with open(nome_arquivo, "wb") as f:
+        f.write(uploaded_file.getbuffer())
+
+    st.success(f"Arquivo salvo em: {nome_arquivo}")
+    st.info(f"Atualizado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+
+lista = sorted(PASTA.glob("Registros_Pendentes-*.xlsx"))
+arquivo_recente = lista[-1] if lista else None
 nome_arq = arquivo_recente.name if arquivo_recente else "Nenhum arquivo encontrado"
-dt_extraido = parse_timestamp_from_filename(nome_arq)
-dt_br = format_timestamp_brazil(dt_extraido)
+dt_br = (
+    datetime.fromtimestamp(os.path.getmtime(arquivo_recente)).strftime("%d/%m/%Y %H:%M")
+    if arquivo_recente
+    else "Data não identificada"
+)
 
-st.markdown(f"""
+st.markdown(
+    f"""
 <div style="
     margin-top:15px;
     margin-bottom:25px;
@@ -345,15 +355,17 @@ st.markdown(f"""
     font-size:1rem;
     font-weight:600;
     color:#0f2a47;">
-📂 Pasta: {PASTA_RP}<br>
+📂 Pasta: {PASTA}<br>
 📄 Arquivo carregado: {nome_arq}<br>
 🕒 Atualizado em: {dt_br}
 </div>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 st.caption("Monitoramento dos registros pendentes enviados pelas GREs e polos.")
 
-df_raw, fonte_dados = carregar_df_pendentes(None)
+df_raw, fonte_dados = carregar_df_pendentes(uploaded_file)
 if df_raw is None or df_raw.empty:
     st.stop()
 
