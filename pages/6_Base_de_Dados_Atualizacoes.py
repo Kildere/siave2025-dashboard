@@ -314,7 +314,7 @@ def process_bases():
     # Botão para baixar parquet
     # -------------------------
     st.download_button(
-        label="📥 Baixar arquivo processado",
+        label="⬇️ Baixar arquivo processado",
         data=gerar_bytes_parquet(df_estrutural),
         file_name="base_estrutural.parquet",
         mime="application/octet-stream"
@@ -380,7 +380,7 @@ def process_bases():
     # Botão para baixar parquet
     # -------------------------
     st.download_button(
-        label="\ud83d\udce5 Baixar arquivo processado",
+        label="⬇️ Baixar arquivo processado",
         data=gerar_bytes_parquet(df_alocacoes),
         file_name="base_agendamentos.parquet",
         mime="application/octet-stream"
@@ -444,7 +444,7 @@ def process_bases():
     # Botão para baixar parquet
     # -------------------------
     st.download_button(
-        label="\ud83d\udce5 Baixar arquivo processado",
+        label="⬇️ Baixar arquivo processado",
         data=gerar_bytes_parquet(df_presenca),
         file_name="base_percentual_presenca.parquet",
         mime="application/octet-stream"
@@ -458,7 +458,7 @@ def process_bases():
     # Botão para baixar parquet
     # -------------------------
     st.download_button(
-        label="\ud83d\udce5 Baixar arquivo processado",
+        label="⬇️ Baixar arquivo processado",
         data=gerar_bytes_parquet(df_pendentes),
         file_name="base_registros_pendentes.parquet",
         mime="application/octet-stream"
