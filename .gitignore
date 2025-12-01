@@ -1,8 +1,22 @@
-data/
-*.parquet
-*.xlsx
-*.csv
-*.xls
-*.json
-/secrets.toml
+# Ignorar caches e temporários do Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pyc
+
+# Ignorar dados locais do SIAVE
+data/origem/
+data/processado/
+
+# Ignorar ambiente virtual
+.venv/
+env/
+venv/
+
+# Ignorar segredos e variáveis privadas
 .env
+secrets.toml
+
+# Ignorar arquivos do Streamlit local
+.streamlit/
