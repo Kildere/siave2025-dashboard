@@ -9,6 +9,75 @@ from src.base_estrutural_loader import normalize_col
 
 PASSWORD_CORRECT = "A9C3B"
 
+POLO_TO_GRE = {
+    "JOAO PESSOA 01": "1\u00aa GRE",
+    "JOAO PESSOA 02": "1\u00aa GRE",
+    "JOAO PESSOA 03": "1\u00aa GRE",
+    "JOAO PESSOA 04": "1\u00aa GRE",
+    "JOAO PESSOA 05": "1\u00aa GRE",
+    "JOAO PESSOA 06": "1\u00aa GRE",
+    "JOAO PESSOA 07": "1\u00aa GRE",
+
+    "GUARABIRA 01": "2\u00aa GRE",
+    "GUARABIRA 02": "2\u00aa GRE",
+    "GUARABIRA 03": "2\u00aa GRE",
+    "GUARABIRA 04": "2\u00aa GRE",
+
+    "CAMPINA GRANDE 01": "3\u00aa GRE",
+    "CAMPINA GRANDE 02": "3\u00aa GRE",
+    "CAMPINA GRANDE 03": "3\u00aa GRE",
+    "CAMPINA GRANDE 04": "3\u00aa GRE",
+    "CAMPINA GRANDE 05": "3\u00aa GRE",
+    "CAMPINA GRANDE 06": "3\u00aa GRE",
+    "CAMPINA GRANDE 07": "3\u00aa GRE",
+    "CAMPINA GRANDE 08": "3\u00aa GRE",
+    "CAMPINA GRANDE 09": "3\u00aa GRE",
+
+    "CUIT\u00c9 01": "4\u00aa GRE",
+    "CUIT\u00c9 02": "4\u00aa GRE",
+
+    "MONTEIRO 01": "5\u00aa GRE",
+    "MONTEIRO 02": "5\u00aa GRE",
+
+    "PATOS 01": "6\u00aa GRE",
+    "PATOS 02": "6\u00aa GRE",
+    "PATOS 03": "6\u00aa GRE",
+
+    "ITAPORANGA 01": "7\u00aa GRE",
+    "ITAPORANGA 02": "7\u00aa GRE",
+
+    "CATOL\u00c9 01": "8\u00aa GRE",
+    "CATOL\u00c9 02": "8\u00aa GRE",
+
+    "CAJAZEIRAS 01": "9\u00aa GRE",
+    "CAJAZEIRAS 02": "9\u00aa GRE",
+
+    "SOUSA 01": "10\u00aa GRE",
+    "SOUSA 02": "10\u00aa GRE",
+
+    "PRINCESA ISABEL": "11\u00aa GRE",
+
+    "ITABAIANA 01": "12\u00aa GRE",
+    "ITABAIANA 02": "12\u00aa GRE",
+
+    "POMBAL": "13\u00aa GRE",
+
+    "MAMANGUAPE 01": "14\u00aa GRE",
+    "MAMANGUAPE 02": "14\u00aa GRE",
+
+    "QUEIMADAS 01": "15\u00aa GRE",
+    "QUEIMADAS 02": "15\u00aa GRE",
+    "QUEMADAS 03": "15\u00aa GRE",
+
+    "SANTA RITA 01": "16\u00aa GRE",
+    "SANTA RITA 02": "16\u00aa GRE",
+    "SANTA RITA 03": "16\u00aa GRE",
+    "SANTA RITA 04": "16\u00aa GRE",
+    "SANTA RITA 05": "16\u00aa GRE",
+    "SANTA RITA 06": "16\u00aa GRE",
+    "SANTA RITA 07": "16\u00aa GRE",
+}
+
 UPLOAD_CONFIGS = [
     {
         "tab": "Base Estrutural",
@@ -183,6 +252,25 @@ def process_bases():
 
     # Base Estrutural
     df_estrutural = pd.read_excel(base_estrutural)
+    # Normalizar nomes para evitar diferencas de acentuacao
+    df_estrutural["Polo_normalizado"] = (
+        df_estrutural["Polo"]
+        .astype(str)
+        .str.normalize("NFKD")
+        .str.encode("ascii", "ignore")
+        .str.decode("ascii")
+        .str.upper()
+        .str.strip()
+    )
+
+    # Aplicar mapeamento POLO -> GRE
+    df_estrutural["gRE"] = df_estrutural["Polo_normalizado"].map(POLO_TO_GRE)
+
+    # Caso algum polo nao esteja no dicionario
+    df_estrutural["gRE"] = df_estrutural["gRE"].fillna("GRE NAO IDENTIFICADA")
+
+    # Remover coluna auxiliar
+    df_estrutural = df_estrutural.drop(columns=["Polo_normalizado"])
     # -----------------------------------------------------------
     # MAPEAR coluna gRE na base estrutural
     # -----------------------------------------------------------
