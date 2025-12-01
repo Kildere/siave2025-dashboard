@@ -125,8 +125,42 @@ def latest_file_with_prefix(folder: Path, prefix: str) -> Path | None:
     return arquivos[-1] if arquivos else None
 
 
+def normalizar_nome(nome):
+    import unicodedata
+    n = unicodedata.normalize("NFKD", str(nome))
+    n = "".join(c for c in n if not unicodedata.combining(c))
+    return "".join(ch.lower() for ch in n if ch.isalnum())
+
+
 def process_bases():
     ensure_folder(PROCESSADO_DIR)
+
+    def padronizar_colunas_obrigatorias(df: pd.DataFrame) -> pd.DataFrame:
+        alvos = {
+            "gre": "gRE",
+            "coescolacenso": "coEscolaCenso",
+            "diaaplicacao": "diaAplicacao",
+        }
+        normalizados = {}
+        for coluna in df.columns:
+            chave = normalizar_nome(coluna)
+            if chave not in normalizados:
+                normalizados[chave] = coluna
+
+        renomear = {}
+        for chave, nome_final in alvos.items():
+            if nome_final in df.columns:
+                continue
+            origem = normalizados.get(chave)
+            if origem:
+                renomear[origem] = nome_final
+        if renomear:
+            df = df.rename(columns=renomear)
+
+        for nome_final in alvos.values():
+            if nome_final not in df.columns:
+                df[nome_final] = None
+        return df
 
     base_estrutural = latest_file_with_prefix(Path("data/origem/Base_Estrutural"), "Base_Estrutural")
     base_alocacoes = latest_file_with_prefix(Path("data/origem/Alocacoes"), "Alocacoes")
@@ -149,6 +183,35 @@ def process_bases():
 
     # Base Estrutural
     df_estrutural = pd.read_excel(base_estrutural)
+    # -----------------------------------------------------------
+    # MAPEAR coluna gRE na base estrutural
+    # -----------------------------------------------------------
+    norm_map = {normalizar_nome(c): c for c in df_estrutural.columns}
+
+    possiveis_gre = [
+        "gre",
+        "regional",
+        "gerenciaregional",
+        "gerenciaderegional",
+        "numgre",
+        "nregional",
+        "gerencia",
+        "grecodigo",
+        "codigogre",
+    ]
+
+    col_gre = None
+    for key in possiveis_gre:
+        if key in norm_map:
+            col_gre = norm_map[key]
+            break
+
+    if col_gre is not None:
+        df_estrutural["gRE"] = df_estrutural[col_gre]
+    else:
+        # fallback seguro sem quebrar o app
+        df_estrutural["gRE"] = "Sem GRE mapeada"
+    df_estrutural = padronizar_colunas_obrigatorias(df_estrutural)
     df_estrutural.columns = [remove_accents(c) for c in df_estrutural.columns]
     for col in df_estrutural.select_dtypes(include=["object"]).columns:
         df_estrutural[col] = df_estrutural[col].apply(remove_accents)
@@ -163,11 +226,107 @@ def process_bases():
 
     # Base de Aloca\u00e7\u00f5es
     df_alocacoes = pd.read_excel(base_alocacoes)
+    # MAPEAR col coEscolaCenso
+    norm_map = {normalizar_nome(c): c for c in df_alocacoes.columns}
+
+    possiveis_coesc = [
+        "coescolacenso",
+        "codigoescola",
+        "codigocenso",
+        "codescola",
+        "escolacod",
+        "escod",
+        "id_escola",
+        "id_escolacenso",
+    ]
+
+    col_codigo = None
+    for key in possiveis_coesc:
+        if key in norm_map:
+            col_codigo = norm_map[key]
+            break
+
+    if col_codigo is not None:
+        df_alocacoes["coEscolaCenso"] = df_alocacoes[col_codigo]
+    else:
+        df_alocacoes["coEscolaCenso"] = pd.NA
+
+    # MAPEAR col diaAplicacao
+    possiveis_dia = [
+        "diaaplicacao",
+        "dia",
+        "aplicacao",
+        "dataaplicacao",
+        "diaprova",
+        "diateste",
+    ]
+
+    col_dia = None
+    for key in possiveis_dia:
+        if key in norm_map:
+            col_dia = norm_map[key]
+            break
+
+    if col_dia is not None:
+        df_alocacoes["diaAplicacao"] = df_alocacoes[col_dia]
+    else:
+        df_alocacoes["diaAplicacao"] = pd.NA
+    df_alocacoes = padronizar_colunas_obrigatorias(df_alocacoes)
     df_alocacoes.to_parquet(PROCESSADO_DIR / "base_agendamentos.parquet", index=False)
     st.success("Base de Aloca\u00e7\u00f5es processada com sucesso.")
 
     # Percentual de Presen\u00e7a
     df_presenca = pd.read_excel(base_presenca)
+    # -----------------------------------------------------------
+    # Garantir coEscolaCenso na base de aplicações
+    # -----------------------------------------------------------
+    norm_map = {normalizar_nome(c): c for c in df_presenca.columns}
+
+    possiveis_coesc = [
+        "coescolacenso",
+        "codigoescola",
+        "codigocenso",
+        "codescola",
+        "escolacod",
+        "escod",
+        "id_escola",
+        "id_escolacenso",
+    ]
+
+    col_codigo = None
+    for key in possiveis_coesc:
+        if key in norm_map:
+            col_codigo = norm_map[key]
+            break
+
+    if col_codigo is not None:
+        df_presenca["coEscolaCenso"] = df_presenca[col_codigo]
+    else:
+        df_presenca["coEscolaCenso"] = pd.NA
+
+    # -----------------------------------------------------------
+    # Garantir diaAplicacao
+    # -----------------------------------------------------------
+    possiveis_dia = [
+        "diaaplicacao",
+        "dia",
+        "aplicacao",
+        "dataaplicacao",
+        "diaprova",
+        "diateste",
+    ]
+
+    col_dia = None
+    for key in possiveis_dia:
+        if key in norm_map:
+            col_dia = norm_map[key]
+            break
+
+    if col_dia is not None:
+        df_presenca["diaAplicacao"] = df_presenca[col_dia]
+    else:
+        df_presenca["diaAplicacao"] = pd.NA
+    df_presenca = padronizar_colunas_obrigatorias(df_presenca)
     df_presenca.to_parquet(PROCESSADO_DIR / "base_aplicacoes.parquet", index=False)
     st.success("Base de Presen\u00e7a processada com sucesso.")
 
