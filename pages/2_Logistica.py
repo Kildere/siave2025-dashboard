@@ -5,7 +5,7 @@ import unicodedata
 from pathlib import Path
 
 import pandas as pd
-import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
 from src.gre_palette import (
@@ -219,24 +219,40 @@ def preparar_logistica(df_map: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame
     return df_log, missing
 
 
-def desenhar_mapa(df_map: pd.DataFrame, geojson_mun: dict) -> px.choropleth:
+def desenhar_mapa(df_map: pd.DataFrame, geojson_mun: dict) -> go.Figure:
     ordered_labels = ordered_gre_labels(df_map["gRE_label"].unique())
-    fig = px.choropleth(
-        df_map,
-        geojson=geojson_mun,
-        locations="id",
-        featureidkey="properties.id",
-        color="gRE_label",
-        hover_name="municipio_display",
-        hover_data={
-            "gRE": True,
-            "gRE_label": False,
-            "municipio_base": True,
-            "id": False,
-            "name_norm": False,
-        },
-        category_orders={"gRE_label": ordered_labels},
-        color_discrete_map=GRE_COLOR_MAP,
+    if not ordered_labels:
+        return go.Figure()
+
+    label_to_idx = {label: idx for idx, label in enumerate(ordered_labels)}
+    z_values = df_map["gRE_label"].map(label_to_idx)
+    if len(ordered_labels) == 1:
+        single_color = GRE_COLOR_MAP.get(ordered_labels[0], "#888888")
+        colorscale = [(0, single_color), (1, single_color)]
+    else:
+        colorscale = [
+            (idx / (len(ordered_labels) - 1), GRE_COLOR_MAP.get(label, "#888888"))
+            for idx, label in enumerate(ordered_labels)
+        ]
+
+    fig = go.Figure(
+        go.Choropleth(
+            geojson=geojson_mun,
+            featureidkey="properties.id",
+            locations=df_map["id"],
+            z=z_values,
+            text=df_map["municipio_display"],
+            customdata=df_map[["municipio_display", "gRE", "municipio_base"]],
+            hovertemplate=(
+                "<b>%{customdata[0]}</b><br>"
+                "GRE: %{customdata[1]}<br>"
+                "Municipio base: %{customdata[2]}<extra></extra>"
+            ),
+            colorscale=colorscale,
+            showscale=False,
+            marker_line_width=0.6,
+            marker_line_color="white",
+        )
     )
     fig.update_geos(fitbounds="locations", visible=False)
     fig.update_layout(
