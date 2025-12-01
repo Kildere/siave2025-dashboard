@@ -6,7 +6,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from src.data_paths import ARQ_BASE_APLICACOES, DATA_ORIGEM
+from src.data_paths import ARQ_BASE_APLICACOES, ARQ_BASE_AGENDAMENTOS
 
 SERIE_LABELS = {
     "3a": "3ª série",
@@ -20,15 +20,15 @@ SERIE_LABELS = {
 SERIE_PATTERN = re.compile("|".join(SERIE_LABELS.keys()))
 AGENDA_START = date(2025, 11, 24)
 AGENDA_END = date(2025, 12, 5)
-PRESENCE_FILE_PATTERN = "Percentual_Presenca-*.xlsx"
 CALENDAR_EXCLUDED_DATES = {date(2025, 11, 29), date(2025, 11, 30)}
+ARQ_BASE_PERCENTUAL = Path("data/processado/base_percentual_presenca.parquet")
 TEAM_GRE_GROUPS = {
     "Equipe 1 - Iara e Sely": {"1", "12", "16"},
     "Equipe 2 - Rodrigo e Kildere": {"7", "9", "10", "11"},
     "Equipe 3 - Andrea e Juvaneide": {"8", "13", "6", "5"},
     "Equipe 4 - Angelica e Janaina": {"3", "4", "2", "14", "15"},
 }
-ARQ_PREVISTOS_PLANILHA = DATA_ORIGEM / "Percentual_Presenca-2025-11-24T15_36_06.168Z.xlsx"
+ARQ_PREVISTOS_PLANILHA = ARQ_BASE_PERCENTUAL
 UPLOAD_LOG_KEY = "aplicacoes_upload_logs"
 MONTH_ABBR_PT = [
     "jan",
@@ -201,7 +201,10 @@ def load_previstos_por_turma(path: Path = ARQ_PREVISTOS_PLANILHA) -> pd.DataFram
     if not path.exists():
         return pd.DataFrame(columns=["turma_norm", "previstos"])
 
-    df_prev = pd.read_excel(path)
+    try:
+        df_prev = pd.read_parquet(path)
+    except Exception:
+        return pd.DataFrame(columns=["turma_norm", "previstos"])
     df_prev.columns = [normalize_previsto_column(col) for col in df_prev.columns]
     rename_map = {
         "qtdalunosprevistos": "previstos",
@@ -213,7 +216,6 @@ def load_previstos_por_turma(path: Path = ARQ_PREVISTOS_PLANILHA) -> pd.DataFram
     df_prev = df_prev.rename(columns=rename_map)
 
     if "turma" not in df_prev.columns or "previstos" not in df_prev.columns:
-        st.error("Planilha de previstos não contém as colunas necessárias (turma e QtdAlunosPrevistos).")
         return pd.DataFrame(columns=["turma_norm", "previstos"])
 
     df_prev["turma_norm"] = df_prev["turma"].astype(str).str.lower().str.strip()
@@ -346,7 +348,7 @@ def merge_presence(df_aplicacoes: pd.DataFrame, df_presence: pd.DataFrame | None
     if "presenceKey" not in df_presence.columns:
         df_presence["presenceKey"] = df_presence["aplicacaoId"]
     merged = df.merge(
-        df_presence.drop(columns=["aplicacaoId"]),
+        df_presence.drop(columns=["aplicacaoId"], errors="ignore"),
         on="presenceKey",
         how="left",
         suffixes=("", "_presence"),
@@ -369,45 +371,29 @@ def get_agenda_dates() -> list[date]:
 
 
 @st.cache_data
-def load_default_presence_from_disk() -> tuple[pd.DataFrame | None, str | None]:
-    """Busca automaticamente o arquivo Percentual_Presenca-* na pasta data/origem."""
-    files = sorted(
-        DATA_ORIGEM.glob(PRESENCE_FILE_PATTERN), key=lambda f: f.stat().st_mtime
-    )
-    if not files:
+def load_presence_from_parquet(path: Path = ARQ_BASE_PERCENTUAL) -> tuple[pd.DataFrame | None, str | None]:
+    """Carrega o parquet consolidado de percentual de presen��a."""
+    if not path.exists():
         return None, None
-    frames = []
-    processed_names: list[str] = []
-    for file in files:
-        try:
-            frames.append(process_presence_file(file))
-            processed_names.append(file.name)
-        except Exception:
-            continue
-    if not frames:
+    try:
+        df = pd.read_parquet(path)
+    except Exception:
         return None, None
-    combined = (
-        pd.concat(frames, ignore_index=True)
-        .sort_values("aplicacaoId")
-        .drop_duplicates(subset=["aplicacaoId"], keep="last")
-        .reset_index(drop=True)
-    )
-    sources = ", ".join(processed_names)
-    return combined, sources
+    return (df, path.name) if not df.empty else (None, path.name)
 
 
 st.title("Aplicações - SIAVE 2025")
 
-from src.utils import get_latest_file, parse_timestamp_from_filename, format_timestamp_brazil
+from src.utils import format_timestamp_brazil
 
 # Caminho da pasta onde os arquivos de alocações são enviados
-PASTA_ALOC = "data/origem/Alocacoes"
-prefixo = "Alocacoes"
-
-arquivo_recente = get_latest_file(PASTA_ALOC, prefixo)
-nome_arq = arquivo_recente.name if arquivo_recente else "Nenhum arquivo encontrado"
-dt_extraido = parse_timestamp_from_filename(nome_arq)
-dt_br = format_timestamp_brazil(dt_extraido)
+arquivo_agend = ARQ_BASE_AGENDAMENTOS
+nome_arq = arquivo_agend.name if arquivo_agend.exists() else "Nenhum arquivo encontrado"
+dt_br = (
+    format_timestamp_brazil(datetime.fromtimestamp(arquivo_agend.stat().st_mtime))
+    if arquivo_agend.exists()
+    else "Data nao identificada"
+)
 
 st.markdown(f"""
 <div style="
@@ -420,7 +406,7 @@ st.markdown(f"""
     font-size:1rem;
     font-weight:600;
     color:#0f2a47;">
-📂 Pasta: {PASTA_ALOC}<br>
+📂 Pasta: {arquivo_agend.parent}<br>
 📄 Arquivo carregado: {nome_arq}<br>
 🕒 Atualizado em: {dt_br}
 </div>
@@ -428,7 +414,7 @@ st.markdown(f"""
 
 base_df = load_base_aplicacoes()
 
-default_presence_df, default_presence_name = load_default_presence_from_disk()
+default_presence_df, default_presence_name = load_presence_from_parquet()
 presence_df = default_presence_df
 presence_source = default_presence_name
 
@@ -689,3 +675,5 @@ else:
             st.dataframe(detail_display, use_container_width=True)
         else:
             st.info("Colunas necessarias para detalhar nao encontradas.")
+
+

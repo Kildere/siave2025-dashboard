@@ -6,15 +6,16 @@ from pathlib import Path
 from io import BytesIO
 import unicodedata
 import math
+from datetime import datetime
 
 # ======================
 # CONFIGURAÇÕES DA PÁGINA
 # ======================
 st.set_page_config(page_title="Registro de Aplicações – Presença por Data da Aplicação", layout="wide")
 
-DATA_ORIGEM = Path("data/origem")
-UPLOAD_PATH = DATA_ORIGEM / "Registro_Aplicacoes.xlsx"
-PRESENCE_GLOB = "Percentual_Presenca-2025-11*.xlsx"
+DATA_PROCESSADO = Path("data/processado")
+UPLOAD_PATH = DATA_PROCESSADO / "Registro_Aplicacoes.xlsx"
+PRESENCE_PARQUET = DATA_PROCESSADO / "base_percentual_presenca.parquet"
 
 from src.data_paths import ARQ_BASE_APLICACOES
 
@@ -234,18 +235,14 @@ def process_registro_planilha(path: Path = UPLOAD_PATH) -> pd.DataFrame | None:
     return aggregated
 
 
-def load_presence_data() -> tuple[pd.DataFrame | None, str | None]:
-    # Usa apenas o arquivo mais recente de presença para evitar divergências de versões.
-    files = sorted(DATA_ORIGEM.glob(PRESENCE_GLOB))
-    if not files:
+def load_presence_data(path: Path = PRESENCE_PARQUET) -> tuple[pd.DataFrame | None, str | None]:
+    if not path.exists():
         return None, None
-    latest = files[-1]
     try:
-        df = process_presence_file(latest)
+        df = pd.read_parquet(path)
     except Exception:
         return None, None
-    return df, latest.name
-
+    return df, path.name
 
 def merge_presence(base_df: pd.DataFrame, presence_df: pd.DataFrame | None) -> pd.DataFrame:
     df = base_df.copy()
@@ -259,8 +256,11 @@ def merge_presence(base_df: pd.DataFrame, presence_df: pd.DataFrame | None) -> p
         df["qtdPresentes"] = pd.NA
         df["percentual"] = pd.NA
         return df.drop(columns=["presenceKey"])
+    presence_to_merge = presence_df.copy()
+    if "aplicacaoid" in presence_to_merge.columns:
+        presence_to_merge = presence_to_merge.drop(columns=["aplicacaoid"])
     merged = df.merge(
-        presence_df.drop(columns=["aplicacaoid"]),
+        presence_to_merge,
         on="presenceKey",
         how="left",
         suffixes=("", "_presence"),
@@ -309,15 +309,15 @@ def summarize_percentual(df: pd.DataFrame, group_col: str) -> pd.DataFrame:
 
 st.title("Registro de Aplicações – Presença por Data da Aplicação")
 
-from src.utils import get_latest_file, parse_timestamp_from_filename, format_timestamp_brazil
+from src.utils import format_timestamp_brazil
 
-PASTA_PP = "data/origem/Percentual_Presenca"
-prefixo = "Percentual_Presenca"
-
-arquivo_recente = get_latest_file(PASTA_PP, prefixo)
-nome_arq = arquivo_recente.name if arquivo_recente else "Nenhum arquivo encontrado"
-dt_extraido = parse_timestamp_from_filename(nome_arq)
-dt_br = format_timestamp_brazil(dt_extraido)
+arquivo_percentual = PRESENCE_PARQUET
+nome_arq = arquivo_percentual.name if arquivo_percentual.exists() else "Nenhum arquivo encontrado"
+dt_br = (
+    format_timestamp_brazil(datetime.fromtimestamp(arquivo_percentual.stat().st_mtime))
+    if arquivo_percentual.exists()
+    else "Data nao identificada"
+)
 
 st.markdown(
     f"""
@@ -331,7 +331,7 @@ st.markdown(
     font-size:1rem;
     font-weight:600;
     color:#0f2a47;">
-📂 Pasta: {PASTA_PP}<br>
+📂 Pasta: {arquivo_percentual.parent}<br>
 🗂️ Arquivo carregado: {nome_arq}<br>
 ⏱️ Atualizado em: {dt_br}
 </div>
@@ -380,11 +380,11 @@ st.dataframe(tabela_conv, use_container_width=True)
 st.divider()
 st.subheader("Visão por Polo > Município > Escola")
 st.caption(
-    "Fonte: arquivos Percentual_Presenca (inclui Percentual_Presenca-2025-11-29T14_47_06.986Z.xlsx)."
+    "Fonte: base processada em data/processado/base_percentual_presenca.parquet."
 )
 
 if presence_df is None or presence_df.empty:
-    st.info("Nenhum arquivo Percentual_Presenca encontrado para montar a visão por Polo.")
+    st.info("Nenhum parquet de percentual de presenca encontrado para montar a visão por Polo.")
     st.stop()
 
 # Usar os valores originais da planilha de presença (presence_df), vinculando ao Polo/Município/Escola via base.

@@ -10,6 +10,7 @@ from src.data_paths import ARQ_TURMAS_GRE
 
 SENHA_CORRETA = "A9C3B"
 PENDENTES_PATTERN = "Registros_Pendentes-*.xlsx"
+PARQUET_REGISTROS = Path("data/processado/base_registros_pendentes.parquet")
 
 COLUMN_HINTS = {
     "gre": {"gre", "regional", "gerenciaregional", "gerencia", "gremetro"},
@@ -166,19 +167,18 @@ def descobrir_colunas(df: pd.DataFrame) -> dict[str, str]:
 
 
 def localizar_arquivo_padrao() -> Path | None:
-    lista = sorted(PASTA.glob("Registros_Pendentes-*.xlsx"))
-    return lista[-1] if lista else None
+    return PARQUET_REGISTROS if PARQUET_REGISTROS.exists() else None
 
 
 @st.cache_data(show_spinner=False)
 def carregar_planilha(path: str) -> pd.DataFrame:
-    return pd.read_excel(path)
+    return pd.read_parquet(path)
 
 
 def carregar_df_pendentes(uploaded_file) -> tuple[pd.DataFrame | None, str | None]:
     arquivo_padrao = localizar_arquivo_padrao()
     if arquivo_padrao is None:
-        st.warning("Nenhum arquivo Registros_Pendentes-*.xlsx foi encontrado em data/origem.")
+        st.warning("Nenhum arquivo base_registros_pendentes.parquet foi encontrado em data/processado.")
         return None, None
     try:
         df = carregar_planilha(str(arquivo_padrao))
@@ -334,8 +334,7 @@ if uploaded_file:
     st.success(f"Arquivo salvo em: {nome_arquivo}")
     st.info(f"Atualizado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
 
-lista = sorted(PASTA.glob("Registros_Pendentes-*.xlsx"))
-arquivo_recente = lista[-1] if lista else None
+arquivo_recente = PARQUET_REGISTROS if PARQUET_REGISTROS.exists() else None
 nome_arq = arquivo_recente.name if arquivo_recente else "Nenhum arquivo encontrado"
 dt_br = (
     datetime.fromtimestamp(os.path.getmtime(arquivo_recente)).strftime("%d/%m/%Y %H:%M")
@@ -355,7 +354,7 @@ st.markdown(
     font-size:1rem;
     font-weight:600;
     color:#0f2a47;">
-📂 Pasta: {PASTA}<br>
+📂 Pasta: {PARQUET_REGISTROS.parent}<br>
 📄 Arquivo carregado: {nome_arq}<br>
 🕒 Atualizado em: {dt_br}
 </div>

@@ -1,7 +1,10 @@
 from pathlib import Path
 from datetime import datetime, timedelta
+import unicodedata
 
+import pandas as pd
 import streamlit as st
+from src.base_estrutural_loader import normalize_col
 
 
 PASSWORD_CORRECT = "A9C3B"
@@ -36,6 +39,8 @@ UPLOAD_CONFIGS = [
         "folder_display": "data/origem/Registros_Pendentes",
     },
 ]
+
+PROCESSADO_DIR = Path("data/processado")
 
 
 def ensure_folder(path: Path) -> None:
@@ -104,6 +109,74 @@ def render_delete_section(folder: Path, prefix: str) -> None:
             st.experimental_rerun()
 
 
+def remove_accents(text):
+    if text is None:
+        return text
+    if not isinstance(text, str):
+        return text
+    nfkd = unicodedata.normalize("NFKD", text)
+    return "".join([c for c in nfkd if not unicodedata.combining(c)])
+
+
+def latest_file_with_prefix(folder: Path, prefix: str) -> Path | None:
+    ensure_folder(folder)
+    pattern = f"{prefix}-*.xlsx"
+    arquivos = sorted(folder.glob(pattern), key=lambda f: f.stat().st_mtime)
+    return arquivos[-1] if arquivos else None
+
+
+def process_bases():
+    ensure_folder(PROCESSADO_DIR)
+
+    base_estrutural = latest_file_with_prefix(Path("data/origem/Base_Estrutural"), "Base_Estrutural")
+    base_alocacoes = latest_file_with_prefix(Path("data/origem/Alocacoes"), "Alocacoes")
+    base_presenca = latest_file_with_prefix(Path("data/origem/Percentual_Presenca"), "Percentual_Presenca")
+    base_pendentes = latest_file_with_prefix(Path("data/origem/Registros_Pendentes"), "Registros_Pendentes")
+
+    faltantes = []
+    if base_estrutural is None:
+        faltantes.append("Base Estrutural")
+    if base_alocacoes is None:
+        faltantes.append("Base de Aloca\u00e7\u00f5es")
+    if base_presenca is None:
+        faltantes.append("Base de Presen\u00e7a")
+    if base_pendentes is None:
+        faltantes.append("Base de Registros Pendentes")
+
+    if faltantes:
+        st.warning("Nenhum arquivo encontrado para: " + ", ".join(faltantes) + ".")
+        return
+
+    # Base Estrutural
+    df_estrutural = pd.read_excel(base_estrutural)
+    df_estrutural.columns = [remove_accents(c) for c in df_estrutural.columns]
+    for col in df_estrutural.select_dtypes(include=["object"]).columns:
+        df_estrutural[col] = df_estrutural[col].apply(remove_accents)
+    df_estrutural.to_parquet(PROCESSADO_DIR / "base_estrutural.parquet", index=False)
+
+    df_estrutural_normalizado = df_estrutural.copy()
+    df_estrutural_normalizado.columns = [normalize_col(c) for c in df_estrutural_normalizado.columns]
+    df_estrutural_normalizado.to_parquet(
+        PROCESSADO_DIR / "base_estrutural_normalizado.parquet", index=False
+    )
+    st.success("Base Estrutural processada com sucesso.")
+
+    # Base de Aloca\u00e7\u00f5es
+    df_alocacoes = pd.read_excel(base_alocacoes)
+    df_alocacoes.to_parquet(PROCESSADO_DIR / "base_agendamentos.parquet", index=False)
+    st.success("Base de Aloca\u00e7\u00f5es processada com sucesso.")
+
+    # Percentual de Presen\u00e7a
+    df_presenca = pd.read_excel(base_presenca)
+    df_presenca.to_parquet(PROCESSADO_DIR / "base_aplicacoes.parquet", index=False)
+    st.success("Base de Presen\u00e7a processada com sucesso.")
+
+    # Registros Pendentes
+    df_pendentes = pd.read_excel(base_pendentes)
+    df_pendentes.to_parquet(PROCESSADO_DIR / "base_registros_pendentes.parquet", index=False)
+    st.success("Base de Registros Pendentes processada com sucesso.")
+
+
 def render_upload_tab(title: str, prefix: str, folder: Path, folder_display: str) -> None:
     st.subheader(f"Upload de {title}")
     uploaded_file = st.file_uploader(
@@ -161,6 +234,7 @@ abas = st.tabs(
         "Aloca\u00e7\u00f5es",
         "Percentual de Presen\u00e7a",
         "Registros Pendentes",
+        "Executar Loader",
     ]
 )
 
@@ -172,3 +246,8 @@ for tab, config in zip(abas, UPLOAD_CONFIGS):
             folder=config["folder"],
             folder_display=config["folder_display"],
         )
+
+with abas[-1]:
+    st.subheader("Executar Loader")
+    if st.button("Processar Bases e Gerar Arquivos .parquet"):
+        process_bases()

@@ -11,7 +11,11 @@ if not BASE_PARQUET.exists():
     st.error("Parquet nao encontrado. Execute o loader primeiro.")
     st.stop()
 
-df = pd.read_parquet(BASE_PARQUET)
+try:
+    df = pd.read_parquet(BASE_PARQUET)
+except Exception as exc:
+    st.error(f"Falha ao ler o parquet processado: {exc}")
+    st.stop()
 
 # colunas esperadas DEFINITIVAS
 expected = [
