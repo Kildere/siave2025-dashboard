@@ -1,3 +1,4 @@
+import io
 from pathlib import Path
 from datetime import datetime, timedelta
 import unicodedata
@@ -200,6 +201,11 @@ def normalizar_nome(nome):
     n = "".join(c for c in n if not unicodedata.combining(c))
     return "".join(ch.lower() for ch in n if ch.isalnum())
 
+def gerar_bytes_parquet(df):
+    buffer = io.BytesIO()
+    df.to_parquet(buffer, index=False)
+    return buffer.getvalue()
+
 
 def process_bases():
     ensure_folder(PROCESSADO_DIR)
@@ -304,6 +310,15 @@ def process_bases():
     for col in df_estrutural.select_dtypes(include=["object"]).columns:
         df_estrutural[col] = df_estrutural[col].apply(remove_accents)
     df_estrutural.to_parquet(PROCESSADO_DIR / "base_estrutural.parquet", index=False)
+    # -------------------------
+    # Botão para baixar parquet
+    # -------------------------
+    st.download_button(
+        label="📥 Baixar arquivo processado",
+        data=gerar_bytes_parquet(df_estrutural),
+        file_name="base_estrutural.parquet",
+        mime="application/octet-stream"
+    )
 
     df_estrutural_normalizado = df_estrutural.copy()
     df_estrutural_normalizado.columns = [normalize_col(c) for c in df_estrutural_normalizado.columns]
@@ -361,6 +376,15 @@ def process_bases():
         df_alocacoes["diaAplicacao"] = pd.NA
     df_alocacoes = padronizar_colunas_obrigatorias(df_alocacoes)
     df_alocacoes.to_parquet(PROCESSADO_DIR / "base_agendamentos.parquet", index=False)
+    # -------------------------
+    # Botão para baixar parquet
+    # -------------------------
+    st.download_button(
+        label="\ud83d\udce5 Baixar arquivo processado",
+        data=gerar_bytes_parquet(df_alocacoes),
+        file_name="base_agendamentos.parquet",
+        mime="application/octet-stream"
+    )
     st.success("Base de Aloca\u00e7\u00f5es processada com sucesso.")
 
     # Percentual de Presen\u00e7a
@@ -416,11 +440,29 @@ def process_bases():
         df_presenca["diaAplicacao"] = pd.NA
     df_presenca = padronizar_colunas_obrigatorias(df_presenca)
     df_presenca.to_parquet(PROCESSADO_DIR / "base_aplicacoes.parquet", index=False)
+    # -------------------------
+    # Botão para baixar parquet
+    # -------------------------
+    st.download_button(
+        label="\ud83d\udce5 Baixar arquivo processado",
+        data=gerar_bytes_parquet(df_presenca),
+        file_name="base_percentual_presenca.parquet",
+        mime="application/octet-stream"
+    )
     st.success("Base de Presen\u00e7a processada com sucesso.")
 
     # Registros Pendentes
     df_pendentes = pd.read_excel(base_pendentes)
     df_pendentes.to_parquet(PROCESSADO_DIR / "base_registros_pendentes.parquet", index=False)
+    # -------------------------
+    # Botão para baixar parquet
+    # -------------------------
+    st.download_button(
+        label="\ud83d\udce5 Baixar arquivo processado",
+        data=gerar_bytes_parquet(df_pendentes),
+        file_name="base_registros_pendentes.parquet",
+        mime="application/octet-stream"
+    )
     st.success("Base de Registros Pendentes processada com sucesso.")
 
 
