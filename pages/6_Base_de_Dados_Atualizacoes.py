@@ -3,6 +3,7 @@ import re
 import unicodedata
 from datetime import datetime
 from pathlib import Path
+from typing import Union
 
 import pandas as pd
 import streamlit as st
@@ -174,7 +175,7 @@ def normalizar_nome(nome: str) -> str:
     return "".join(ch for ch in texto if ch.isalnum())
 
 
-def normalizar_municipio(x) -> str | pd.NA:
+def normalizar_municipio(x) -> Union[str, None]:
     if pd.isna(x):
         return pd.NA
     txt = remove_accents(str(x)).lower()
@@ -183,7 +184,7 @@ def normalizar_municipio(x) -> str | pd.NA:
     return txt if txt else pd.NA
 
 
-def normalizar_gre(valor):
+def normalizar_gre(valor) -> Union[str, None]:
     """
     Converte entradas como '11a GRE', '11 a gre', '11\\u00AA Gre', '11 a gre', '11\\u00AA GRE'
     para o formato oficial '11\\u00AA GRE'.
@@ -200,6 +201,13 @@ def normalizar_gre(valor):
     except ValueError:
         return pd.NA
     return f"{numero_int}{ORDINAL_SUFFIX} GRE"
+
+
+def normalizar_string(x) -> Union[str, None]:
+    if pd.isna(x):
+        return None
+    txt = remove_accents(str(x)).strip()
+    return txt if txt else None
 
 
 def gerar_bytes_parquet(df: pd.DataFrame) -> bytes:
