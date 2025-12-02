@@ -3,3 +3,5 @@ pandas
 plotly
 openpyxl
 pyarrow
+firebase-admin==6.5.0
+numpy
