@@ -1,6 +1,7 @@
 import io
+import re
 import unicodedata
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -8,62 +9,10 @@ import streamlit as st
 
 from src.base_estrutural_loader import normalize_col
 
+st.set_page_config(page_title="Loader - SIAVE 2025", layout="wide")
 
 PASSWORD_CORRECT = "A9C3B"
-
-POLO_TO_GRE = {
-    "JOAO PESSOA 01": "1a GRE",
-    "JOAO PESSOA 02": "1a GRE",
-    "JOAO PESSOA 03": "1a GRE",
-    "JOAO PESSOA 04": "1a GRE",
-    "JOAO PESSOA 05": "1a GRE",
-    "JOAO PESSOA 06": "1a GRE",
-    "JOAO PESSOA 07": "1a GRE",
-    "GUARABIRA 01": "2a GRE",
-    "GUARABIRA 02": "2a GRE",
-    "GUARABIRA 03": "2a GRE",
-    "GUARABIRA 04": "2a GRE",
-    "CAMPINA GRANDE 01": "3a GRE",
-    "CAMPINA GRANDE 02": "3a GRE",
-    "CAMPINA GRANDE 03": "3a GRE",
-    "CAMPINA GRANDE 04": "3a GRE",
-    "CAMPINA GRANDE 05": "3a GRE",
-    "CAMPINA GRANDE 06": "3a GRE",
-    "CAMPINA GRANDE 07": "3a GRE",
-    "CAMPINA GRANDE 08": "3a GRE",
-    "CAMPINA GRANDE 09": "3a GRE",
-    "CUITE 01": "4a GRE",
-    "CUITE 02": "4a GRE",
-    "MONTEIRO 01": "5a GRE",
-    "MONTEIRO 02": "5a GRE",
-    "PATOS 01": "6a GRE",
-    "PATOS 02": "6a GRE",
-    "PATOS 03": "6a GRE",
-    "ITAPORANGA 01": "7a GRE",
-    "ITAPORANGA 02": "7a GRE",
-    "CATOLE 01": "8a GRE",
-    "CATOLE 02": "8a GRE",
-    "CAJAZEIRAS 01": "9a GRE",
-    "CAJAZEIRAS 02": "9a GRE",
-    "SOUSA 01": "10a GRE",
-    "SOUSA 02": "10a GRE",
-    "PRINCESA ISABEL": "11a GRE",
-    "ITABAIANA 01": "12a GRE",
-    "ITABAIANA 02": "12a GRE",
-    "POMBAL": "13a GRE",
-    "MAMANGUAPE 01": "14a GRE",
-    "MAMANGUAPE 02": "14a GRE",
-    "QUEIMADAS 01": "15a GRE",
-    "QUEIMADAS 02": "15a GRE",
-    "QUEMADAS 03": "15a GRE",
-    "SANTA RITA 01": "16a GRE",
-    "SANTA RITA 02": "16a GRE",
-    "SANTA RITA 03": "16a GRE",
-    "SANTA RITA 04": "16a GRE",
-    "SANTA RITA 05": "16a GRE",
-    "SANTA RITA 06": "16a GRE",
-    "SANTA RITA 07": "16a GRE",
-}
+PROCESSADO_DIR = Path("data/processado")
 
 UPLOAD_CONFIGS = [
     {
@@ -96,35 +45,178 @@ UPLOAD_CONFIGS = [
     },
 ]
 
-PROCESSADO_DIR = Path("data/processado")
+ESTRUTURAL_SCHEMA = [
+    "UF",
+    "Polo",
+    "coEscolaCenso",
+    "Escola",
+    "Municipio",
+    "Localizacao",
+    "Rede",
+    "Telefone1",
+    "Telefone2",
+    "CoTurmaCenso",
+    "Turma",
+    "Serie",
+    "Turno",
+    "ObservacoesDaEscola",
+    "TemCiencias",
+    "QtdDiasAplicacao",
+    "gRE",
+    "diaAplicacao",
+]
+
+AGENDAMENTOS_SCHEMA = [
+    "uf",
+    "polo",
+    "coEscolaCenso",
+    "escola",
+    "municipio",
+    "serie",
+    "turno",
+    "tipoAplic",
+    "statusAplicacao",
+    "localizacao",
+    "tipoRede",
+    "aplicador",
+    "cpf",
+    "qtdAlunosPrevistos",
+    "diaAplicacao",
+    "dataAgendamento",
+    "gRE",
+    "aplicacaoId",
+]
+
+PRESENCA_SCHEMA = [
+    "uf",
+    "polo",
+    "tipoRede",
+    "localizacao",
+    "coEscolaCenso",
+    "escola",
+    "serie",
+    "qtdAlunosPrevistos",
+    "qtdAlunosPresentes",
+    "percentual",
+    "diaAplicacao",
+    "dataReal",
+    "gRE",
+]
+
+ORDINAL_SUFFIX = "\u00AA"
+
+POLO_TO_GRE = {
+    "JOAO PESSOA 01": "1",
+    "JOAO PESSOA 02": "1",
+    "JOAO PESSOA 03": "1",
+    "JOAO PESSOA 04": "1",
+    "JOAO PESSOA 05": "1",
+    "JOAO PESSOA 06": "1",
+    "JOAO PESSOA 07": "1",
+    "GUARABIRA 01": "2",
+    "GUARABIRA 02": "2",
+    "GUARABIRA 03": "2",
+    "GUARABIRA 04": "2",
+    "CAMPINA GRANDE 01": "3",
+    "CAMPINA GRANDE 02": "3",
+    "CAMPINA GRANDE 03": "3",
+    "CAMPINA GRANDE 04": "3",
+    "CAMPINA GRANDE 05": "3",
+    "CAMPINA GRANDE 06": "3",
+    "CAMPINA GRANDE 07": "3",
+    "CAMPINA GRANDE 08": "3",
+    "CAMPINA GRANDE 09": "3",
+    "CUITE 01": "4",
+    "CUITE 02": "4",
+    "MONTEIRO 01": "5",
+    "MONTEIRO 02": "5",
+    "PATOS 01": "6",
+    "PATOS 02": "6",
+    "PATOS 03": "6",
+    "ITAPORANGA 01": "7",
+    "ITAPORANGA 02": "7",
+    "CATOLE 01": "8",
+    "CATOLE 02": "8",
+    "CAJAZEIRAS 01": "9",
+    "CAJAZEIRAS 02": "9",
+    "SOUSA 01": "10",
+    "SOUSA 02": "10",
+    "PRINCESA ISABEL": "11",
+    "ITABAIANA 01": "12",
+    "ITABAIANA 02": "12",
+    "POMBAL": "13",
+    "MAMANGUAPE 01": "14",
+    "MAMANGUAPE 02": "14",
+    "QUEIMADAS 01": "15",
+    "QUEIMADAS 02": "15",
+    "QUEMADAS 03": "15",
+    "SANTA RITA 01": "16",
+    "SANTA RITA 02": "16",
+    "SANTA RITA 03": "16",
+    "SANTA RITA 04": "16",
+    "SANTA RITA 05": "16",
+    "SANTA RITA 06": "16",
+    "SANTA RITA 07": "16",
+}
 
 
 def ensure_folder(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
 
 
-def format_timestamp_brazil(dt: datetime) -> str:
-    brasil = dt - timedelta(hours=3)
-    return brasil.strftime("%d/%m/%Y %H:%M:%S")
+def remove_accents(text: str) -> str:
+    nfkd = unicodedata.normalize("NFKD", str(text))
+    return "".join([c for c in nfkd if not unicodedata.combining(c)])
 
 
-def build_timestamped_filename(prefix: str, now: datetime) -> str:
-    timestamp = now.strftime("%Y-%m-%dT%H_%M_%S.%f")[:23]
-    return f"{prefix}-{timestamp}Z.xlsx"
+def normalizar_nome(nome: str) -> str:
+    texto = remove_accents(str(nome)).lower()
+    return "".join(ch for ch in texto if ch.isalnum())
 
 
-def save_uploaded_file(uploaded_file, folder: Path, prefix: str) -> tuple[Path, datetime]:
+def normalizar_municipio(x) -> str | pd.NA:
+    if pd.isna(x):
+        return pd.NA
+    txt = remove_accents(str(x)).lower()
+    txt = re.sub(r"[^a-z0-9 ]", " ", txt)
+    txt = " ".join(txt.split())
+    return txt if txt else pd.NA
+
+
+def normalizar_gre(valor):
+    """
+    Converte entradas como '11a GRE', '11 a gre', '11\\u00AA Gre', '11 a gre', '11\\u00AA GRE'
+    para o formato oficial '11\\u00AA GRE'.
+    """
+    if pd.isna(valor):
+        return pd.NA
+    texto = remove_accents(str(valor)).upper()
+    digitos = re.findall(r"\d+", texto)
+    if not digitos:
+        return pd.NA
+    numero = digitos[0].lstrip("0") or "0"
+    try:
+        numero_int = int(numero)
+    except ValueError:
+        return pd.NA
+    return f"{numero_int}{ORDINAL_SUFFIX} GRE"
+
+
+def gerar_bytes_parquet(df: pd.DataFrame) -> bytes:
+    buffer = io.BytesIO()
+    df.to_parquet(buffer, index=False)
+    return buffer.getvalue()
+
+
+def latest_file_with_prefix(folder: Path, prefix: str) -> Path | None:
     ensure_folder(folder)
-    now = datetime.utcnow()
-    filename = build_timestamped_filename(prefix, now)
-    destination = folder / filename
-    destination.write_bytes(uploaded_file.getbuffer())
-    return destination, now
+    arquivos = sorted(folder.glob(f"{prefix}-*.xlsx"), key=lambda f: f.stat().st_mtime)
+    return arquivos[-1] if arquivos else None
 
 
 def list_files(folder: Path) -> list[Path]:
     ensure_folder(folder)
-    return sorted(folder.glob("*.xlsx"), key=lambda f: f.stat().st_mtime, reverse=True)
+    return sorted([f for f in folder.glob("*.xlsx") if not f.name.startswith("~$")], key=lambda f: f.stat().st_mtime, reverse=True)
 
 
 def render_history(folder: Path) -> None:
@@ -136,12 +228,7 @@ def render_history(folder: Path) -> None:
     data = []
     for file in files:
         created = datetime.fromtimestamp(file.stat().st_mtime)
-        data.append(
-            {
-                "Arquivo": file.name,
-                "Criado em (Brasil)": format_timestamp_brazil(created),
-            }
-        )
+        data.append({"Arquivo": file.name, "Criado em": created.strftime("%d/%m/%Y %H:%M:%S")})
     st.table(data)
 
 
@@ -150,13 +237,8 @@ def render_delete_section(folder: Path, prefix: str) -> None:
     if not files:
         st.info("Nenhum arquivo disponivel para exclusao.")
         return
-
     options = [file.name for file in files]
-    selected = st.selectbox(
-        "Selecione um arquivo para excluir",
-        options,
-        key=f"delete_select_{prefix}",
-    )
+    selected = st.selectbox("Selecione um arquivo para excluir", options, key=f"delete_select_{prefix}")
     if st.button("Excluir arquivo selecionado", key=f"delete_button_{prefix}"):
         target = folder / selected
         if target.exists():
@@ -165,408 +247,307 @@ def render_delete_section(folder: Path, prefix: str) -> None:
             st.experimental_rerun()
 
 
-def remove_accents(text):
-    if text is None:
-        return text
-    if not isinstance(text, str):
-        return text
-    nfkd = unicodedata.normalize("NFKD", text)
-    return "".join([c for c in nfkd if not unicodedata.combining(c)])
-
-
-def normalize_upper(text):
-    text = remove_accents(text)
-    return str(text).upper().strip()
-
-
-def latest_file_with_prefix(folder: Path, prefix: str) -> Path | None:
+def save_uploaded_file(uploaded_file, folder: Path, prefix: str) -> Path:
     ensure_folder(folder)
-    pattern = f"{prefix}-*.xlsx"
-    arquivos = sorted(folder.glob(pattern), key=lambda f: f.stat().st_mtime)
-    return arquivos[-1] if arquivos else None
+    now = datetime.utcnow()
+    timestamp = now.strftime("%Y-%m-%dT%H_%M_%S.%f")[:23]
+    filename = f"{prefix}-{timestamp}Z.xlsx"
+    destination = folder / filename
+    destination.write_bytes(uploaded_file.getbuffer())
+    return destination
 
 
-def normalizar_nome(nome):
-    n = unicodedata.normalize("NFKD", str(nome))
-    n = "".join(c for c in n if not unicodedata.combining(c))
-    return "".join(ch.lower() for ch in n if ch.isalnum())
+def pick_column(df: pd.DataFrame, norm_map: dict[str, str], candidates: list[str]) -> pd.Series | None:
+    for cand in candidates:
+        if cand in norm_map:
+            return df[norm_map[cand]]
+    return None
 
 
-def gerar_bytes_parquet(df):
-    buffer = io.BytesIO()
-    df.to_parquet(buffer, index=False)
-    return buffer.getvalue()
+def serie_texto(df: pd.DataFrame, norm_map: dict[str, str], candidates: list[str]) -> pd.Series:
+    col = pick_column(df, norm_map, candidates)
+    if col is None:
+        return pd.Series(pd.NA, index=df.index, dtype="string")
+    return col.astype("string").str.strip().replace({"": pd.NA})
 
 
-def process_bases():
+def serie_numero(df: pd.DataFrame, norm_map: dict[str, str], candidates: list[str]) -> pd.Series:
+    col = pick_column(df, norm_map, candidates)
+    if col is None:
+        return pd.Series(pd.NA, index=df.index, dtype="Int64")
+    return pd.to_numeric(col, errors="coerce").astype("Int64")
+
+
+def serie_data(df: pd.DataFrame, norm_map: dict[str, str], candidates: list[str]) -> pd.Series:
+    col = pick_column(df, norm_map, candidates)
+    if col is None:
+        return pd.Series(pd.NaT, index=df.index, dtype="datetime64[ns]")
+    return pd.to_datetime(col, dayfirst=True, errors="coerce")
+
+
+def gre_from_polo(polo_series: pd.Series) -> pd.Series:
+    polo_norm = polo_series.astype("string").fillna("").apply(lambda x: remove_accents(x).upper().strip())
+    return polo_norm.map(POLO_TO_GRE)
+
+
+def process_base_estrutural(path: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
+    df_raw = pd.read_excel(path)
+    norm_map = {normalizar_nome(c): c for c in df_raw.columns}
+
+    df = pd.DataFrame(index=df_raw.index)
+    df["UF"] = serie_texto(df_raw, norm_map, ["uf"])
+    df["Polo"] = serie_texto(df_raw, norm_map, ["polo", "regional"])
+    df["coEscolaCenso"] = serie_texto(df_raw, norm_map, ["coescolacenso", "codigoescola"])
+    df["Escola"] = serie_texto(df_raw, norm_map, ["escola", "nomeescola"])
+    df["Municipio"] = serie_texto(df_raw, norm_map, ["municipio", "cidade"]).apply(normalizar_municipio)
+    df["Localizacao"] = serie_texto(df_raw, norm_map, ["localizacao", "localizacaoescola", "localidade"])
+    df["Rede"] = serie_texto(df_raw, norm_map, ["rede", "tiporede"])
+    df["Telefone1"] = serie_texto(df_raw, norm_map, ["telefone1", "telefone", "tel1"])
+    df["Telefone2"] = serie_texto(df_raw, norm_map, ["telefone2", "tel2"])
+    df["CoTurmaCenso"] = serie_texto(df_raw, norm_map, ["coturmacenso", "turmacenso", "codturma", "turma"])
+    df["Turma"] = serie_texto(df_raw, norm_map, ["turma"])
+    df["Serie"] = serie_texto(df_raw, norm_map, ["serie", "serieano"])
+    df["Turno"] = serie_texto(df_raw, norm_map, ["turno"])
+    df["ObservacoesDaEscola"] = serie_texto(df_raw, norm_map, ["observacoesdaescola", "observacoes", "observacao", "obsescola"])
+    df["TemCiencias"] = serie_texto(df_raw, norm_map, ["temciencias", "ciencias"])
+    df["QtdDiasAplicacao"] = serie_numero(df_raw, norm_map, ["qtddiasaplicacao", "diasaplicacao", "qtdiasaplicacao", "quantidadedias"])
+    df["gRE"] = serie_texto(df_raw, norm_map, ["gre"])
+    df["diaAplicacao"] = serie_texto(df_raw, norm_map, ["diaaplicacao", "diaplicacao", "dia", "dataaplicacao"])
+
+    gre_fallback = gre_from_polo(df["Polo"])
+    df["gRE"] = df["gRE"].where(~df["gRE"].isna(), gre_fallback)
+    df["gRE"] = df["gRE"].apply(normalizar_gre)
+    df["coEscolaCenso"] = df["coEscolaCenso"].astype("string").str.strip().replace({"": pd.NA})
+
+    df = df.reindex(columns=ESTRUTURAL_SCHEMA)
+
+    df_normalizado = df.copy()
+    df_normalizado.columns = [normalize_col(c) for c in df_normalizado.columns]
+    df_normalizado["municipio_norm"] = df_normalizado["municipio"].apply(normalizar_municipio)
+
+    return df, df_normalizado
+
+
+def process_base_agendamentos(path: Path) -> pd.DataFrame:
+    df_raw = pd.read_excel(path)
+    norm_map = {normalizar_nome(c): c for c in df_raw.columns}
+
+    df = pd.DataFrame(index=df_raw.index)
+    df["uf"] = serie_texto(df_raw, norm_map, ["uf"])
+    df["polo"] = serie_texto(df_raw, norm_map, ["polo", "regional"])
+    df["coEscolaCenso"] = serie_texto(df_raw, norm_map, ["coescolacenso", "codigoescola"])
+    df["escola"] = serie_texto(df_raw, norm_map, ["escola", "nomeescola"])
+    df["municipio"] = serie_texto(df_raw, norm_map, ["municipio", "cidade"]).apply(normalizar_municipio)
+    df["serie"] = serie_texto(df_raw, norm_map, ["serie", "serieano"])
+    df["turno"] = serie_texto(df_raw, norm_map, ["turno"])
+    df["tipoAplic"] = serie_texto(df_raw, norm_map, ["tipoaplic", "tipoaplicacao", "aplicacao"])
+    df["statusAplicacao"] = serie_texto(df_raw, norm_map, ["statusaplicacao", "status", "statusaplic"])
+    df["localizacao"] = serie_texto(df_raw, norm_map, ["localizacao", "localizacaoescola", "localidade"])
+    df["tipoRede"] = serie_texto(df_raw, norm_map, ["tiporede", "rede"])
+    df["aplicador"] = serie_texto(df_raw, norm_map, ["aplicador", "aplicadora", "aplicadornome"])
+    df["cpf"] = serie_texto(df_raw, norm_map, ["cpf", "aplicadorcpf"])
+    df["qtdAlunosPrevistos"] = serie_numero(df_raw, norm_map, ["qtdalunosprevistos", "alocados", "qtdalunos"])
+    df["diaAplicacao"] = serie_texto(df_raw, norm_map, ["diaaplicacao", "diaplicacao", "dia", "dataaplicacao"])
+    df["dataAgendamento"] = serie_data(df_raw, norm_map, ["dataagendamento", "dataagendmento", "agendamento", "dataaplicacao"])
+    df["gRE"] = serie_texto(df_raw, norm_map, ["gre"])
+    df["aplicacaoId"] = serie_texto(df_raw, norm_map, ["aplicacaoid", "idaplicacao", "id"])
+
+    gre_fallback = gre_from_polo(df["polo"])
+    df["gRE"] = df["gRE"].where(~df["gRE"].isna(), gre_fallback)
+    df["gRE"] = df["gRE"].apply(normalizar_gre)
+    df["coEscolaCenso"] = df["coEscolaCenso"].astype("string").str.strip().replace({"": pd.NA})
+
+    return df.reindex(columns=AGENDAMENTOS_SCHEMA)
+
+
+def process_base_presenca(path: Path) -> pd.DataFrame:
+    df_raw = pd.read_excel(path)
+    norm_map = {normalizar_nome(c): c for c in df_raw.columns}
+
+    df = pd.DataFrame(index=df_raw.index)
+    df["uf"] = serie_texto(df_raw, norm_map, ["uf"])
+    df["polo"] = serie_texto(df_raw, norm_map, ["polo", "regional"])
+    df["tipoRede"] = serie_texto(df_raw, norm_map, ["tiporede", "rede"])
+    df["localizacao"] = serie_texto(df_raw, norm_map, ["localizacao", "localidade"])
+    df["coEscolaCenso"] = serie_texto(df_raw, norm_map, ["coescolacenso", "codigoescola"])
+    df["escola"] = serie_texto(df_raw, norm_map, ["escola", "nomeescola"])
+    df["serie"] = serie_texto(df_raw, norm_map, ["serie", "serieano"])
+    df["qtdAlunosPrevistos"] = serie_numero(df_raw, norm_map, ["qtdalunosprevistos", "previstos", "alunosprevistos"])
+    df["qtdAlunosPresentes"] = serie_numero(df_raw, norm_map, ["qtdalunospresentes", "presentes", "alunospresentes"])
+    df["percentual"] = pd.to_numeric(serie_texto(df_raw, norm_map, ["percentual", "porcentagem", "percentualpresenca"]), errors="coerce")
+    df["diaAplicacao"] = serie_texto(df_raw, norm_map, ["diaaplicacao", "diaplicacao", "dia", "dataaplicacao"])
+    df["dataReal"] = serie_data(df_raw, norm_map, ["datareal", "dataaplicacaoreal", "datarealizada"])
+    df["gRE"] = serie_texto(df_raw, norm_map, ["gre"])
+
+    gre_fallback = gre_from_polo(df["polo"])
+    df["gRE"] = df["gRE"].where(~df["gRE"].isna(), gre_fallback)
+    df["gRE"] = df["gRE"].apply(normalizar_gre)
+    df["coEscolaCenso"] = df["coEscolaCenso"].astype("string").str.strip().replace({"": pd.NA})
+
+    return df.reindex(columns=PRESENCA_SCHEMA)
+
+
+def process_base_pendentes(path: Path) -> pd.DataFrame:
+    df = pd.read_excel(path)
+    new_cols = {col: remove_accents(str(col)).strip() for col in df.columns}
+    df = df.rename(columns=new_cols)
+    gre_cols = [c for c in df.columns if c.lower() == "gre"]
+    if gre_cols:
+        df = df.rename(columns={gre_cols[0]: "gRE"})
+    if "gRE" in df.columns:
+        df["gRE"] = df["gRE"].apply(normalizar_gre)
+    mun_cols = [c for c in df.columns if normalizar_nome(c) == "municipio"]
+    if mun_cols:
+        df["municipio"] = df[mun_cols[0]].apply(normalizar_municipio)
+    return df
+
+
+def load_existing_outputs() -> None:
+    if st.session_state.get("loader_ok"):
+        return
+    paths = {
+        "estrutural": PROCESSADO_DIR / "base_estrutural.parquet",
+        "agendamentos": PROCESSADO_DIR / "base_agendamentos.parquet",
+        "presenca": PROCESSADO_DIR / "base_percentual_presenca.parquet",
+        "pendentes": PROCESSADO_DIR / "base_registros_pendentes.parquet",
+    }
+    if all(p.exists() for p in paths.values()):
+        st.session_state["arquivos_processados"] = {
+            "estrutural": pd.read_parquet(paths["estrutural"]),
+            "agendamentos": pd.read_parquet(paths["agendamentos"]),
+            "presenca": pd.read_parquet(paths["presenca"]),
+            "pendentes": pd.read_parquet(paths["pendentes"]),
+        }
+        st.session_state["loader_ok"] = True
+
+
+def process_bases() -> None:
     ensure_folder(PROCESSADO_DIR)
 
-    base_estrutural = latest_file_with_prefix(Path("data/origem/Base_Estrutural"), "Base_Estrutural")
-    base_alocacoes = latest_file_with_prefix(Path("data/origem/Alocacoes"), "Alocacoes")
-    base_presenca = latest_file_with_prefix(Path("data/origem/Percentual_Presenca"), "Percentual_Presenca")
-    base_pendentes = latest_file_with_prefix(Path("data/origem/Registros_Pendentes"), "Registros_Pendentes")
+    base_paths = {
+        "estrutural": latest_file_with_prefix(Path("data/origem/Base_Estrutural"), "Base_Estrutural"),
+        "agendamentos": latest_file_with_prefix(Path("data/origem/Alocacoes"), "Alocacoes"),
+        "presenca": latest_file_with_prefix(Path("data/origem/Percentual_Presenca"), "Percentual_Presenca"),
+        "pendentes": latest_file_with_prefix(Path("data/origem/Registros_Pendentes"), "Registros_Pendentes"),
+    }
 
-    faltantes = []
-    if base_estrutural is None:
-        faltantes.append("Base Estrutural")
-    if base_alocacoes is None:
-        faltantes.append("Base de Alocacoes")
-    if base_presenca is None:
-        faltantes.append("Base de Presenca")
-    if base_pendentes is None:
-        faltantes.append("Base de Registros Pendentes")
-
+    faltantes = [nome for nome, caminho in base_paths.items() if caminho is None]
     if faltantes:
         st.warning("Nenhum arquivo encontrado para: " + ", ".join(faltantes) + ".")
         return
 
-    # Base Estrutural
-    df_estrutural = pd.read_excel(base_estrutural)
-    if "Municipio" in df_estrutural.columns and "municipio" not in df_estrutural.columns:
-        df_estrutural = df_estrutural.rename(columns={"Municipio": "municipio"})
-    if "municipio" in df_estrutural.columns:
-        df_estrutural["municipio"] = df_estrutural["municipio"].apply(normalize_upper)
+    df_estrutural, df_estrutural_normalizado = process_base_estrutural(base_paths["estrutural"])
+    df_agendamentos = process_base_agendamentos(base_paths["agendamentos"])
+    df_presenca = process_base_presenca(base_paths["presenca"])
+    df_pendentes = process_base_pendentes(base_paths["pendentes"])
 
-    df_estrutural["Polo_normalizado"] = (
-        df_estrutural["Polo"]
-        .astype(str)
-        .str.normalize("NFKD")
-        .str.encode("ascii", "ignore")
-        .str.decode("ascii")
-        .str.upper()
-        .str.strip()
-    )
-    df_estrutural["gRE"] = df_estrutural["Polo_normalizado"].map(POLO_TO_GRE)
-    df_estrutural["gRE"] = df_estrutural["gRE"].fillna("GRE NAO IDENTIFICADA")
-    df_estrutural["gRE"] = df_estrutural["gRE"].apply(normalize_upper)
-    df_estrutural = df_estrutural.drop(columns=["Polo_normalizado"])
-    df_estrutural.columns = [remove_accents(c) for c in df_estrutural.columns]
-    for col in df_estrutural.select_dtypes(include=["object"]).columns:
-        df_estrutural[col] = df_estrutural[col].apply(remove_accents)
     df_estrutural.to_parquet(PROCESSADO_DIR / "base_estrutural.parquet", index=False)
-    st.download_button(
-        label="⬇️ Baixar arquivo processado",
-        data=gerar_bytes_parquet(df_estrutural),
-        file_name="base_estrutural.parquet",
-        mime="application/octet-stream",
-    )
-
-    df_estrutural_normalizado = df_estrutural.copy()
-    df_estrutural_normalizado.columns = [normalize_col(c) for c in df_estrutural_normalizado.columns]
-    df_estrutural_normalizado.to_parquet(
-        PROCESSADO_DIR / "base_estrutural_normalizado.parquet", index=False
-    )
-    st.success("Base Estrutural processada com sucesso.")
-
-    # Base de Agendamentos
-    df_alocacoes = pd.read_excel(base_alocacoes)
-    norm_map = {normalizar_nome(c): c for c in df_alocacoes.columns}
-
-    if "dataagendmento" in norm_map:
-        df_alocacoes = df_alocacoes.rename(columns={norm_map["dataagendmento"]: "dataAgendamento"})
-    norm_map = {normalizar_nome(c): c for c in df_alocacoes.columns}
-
-    if "coescolacenso" in norm_map:
-        df_alocacoes = df_alocacoes.rename(columns={norm_map["coescolacenso"]: "coEscolaCenso"})
-    elif "codigoescola" in norm_map:
-        df_alocacoes = df_alocacoes.rename(columns={norm_map["codigoescola"]: "coEscolaCenso"})
-    if "coEscolaCenso" not in df_alocacoes.columns:
-        alt_col = norm_map.get("codigoescola") or norm_map.get("coescolacenso")
-        df_alocacoes["coEscolaCenso"] = df_alocacoes[alt_col] if alt_col else pd.NA
-    df_alocacoes["coEscolaCenso"] = df_alocacoes["coEscolaCenso"].astype(str).str.strip()
-
-    municipio_col = norm_map.get("municipio") or norm_map.get("municipioescola") or norm_map.get("municipioescol")
-    if municipio_col:
-        df_alocacoes = df_alocacoes.rename(columns={municipio_col: "municipio"})
-    if "municipio" not in df_alocacoes.columns:
-        df_alocacoes["municipio"] = pd.NA
-    df_alocacoes["municipio"] = df_alocacoes["municipio"].apply(normalize_upper)
-
-    def pick_col(possiveis):
-        norm_map_local = {normalizar_nome(c): c for c in df_alocacoes.columns}
-        for key in possiveis:
-            if key in norm_map_local:
-                return norm_map_local[key]
-        return None
-
-    def serie_texto(possiveis):
-        col = pick_col(possiveis)
-        if col is None:
-            return pd.Series(pd.NA, index=df_alocacoes.index, dtype="string")
-        return df_alocacoes[col].astype("string").str.strip()
-
-    def serie_numero(possiveis):
-        col = pick_col(possiveis)
-        if col is None:
-            return pd.Series(pd.NA, index=df_alocacoes.index, dtype="Int64")
-        return pd.to_numeric(df_alocacoes[col], errors="coerce").astype("Int64")
-
-    def limpar_vazios(series: pd.Series) -> pd.Series:
-        return series.replace({"": pd.NA, "nan": pd.NA, "None": pd.NA})
-
-    df_agendamentos_norm = pd.DataFrame(index=df_alocacoes.index)
-    df_agendamentos_norm["escola"] = limpar_vazios(serie_texto(["escola", "nomeescola"]))
-    df_agendamentos_norm["municipio"] = df_alocacoes["municipio"]
-    df_agendamentos_norm["polo"] = limpar_vazios(serie_texto(["polo"]))
-    df_agendamentos_norm["coEscolaCenso"] = df_alocacoes["coEscolaCenso"]
-    df_agendamentos_norm["serie"] = limpar_vazios(serie_texto(["serie", "serieano"]))
-    df_agendamentos_norm["turno"] = limpar_vazios(serie_texto(["turno"]))
-    df_agendamentos_norm["turma"] = limpar_vazios(serie_texto(["turma"]))
-
-    df_agendamentos_norm["qtdAlunosPrevistos"] = serie_numero(
-        ["alocados", "qtdalunos", "qtdalunosprevistos"]
-    )
-
-    dia_aplicacao = serie_texto(
-        [
-            "diaaplicacao",
-            "dia",
-            "aplicacao",
-            "dataaplicacao",
-            "diaprova",
-            "diateste",
-        ]
-    )
-    df_agendamentos_norm["diaAplicacao"] = limpar_vazios(dia_aplicacao).astype(str).str.strip()
-
-    data_agendamento = serie_texto(
-        ["dataagendamento", "dataagendmento", "agendamento", "dataaplicacao"]
-    )
-    df_agendamentos_norm["dataAgendamento"] = pd.to_datetime(
-        data_agendamento, dayfirst=True, errors="coerce"
-    )
-    if "dataAplicacaoReal" in df_alocacoes.columns:
-        df_agendamentos_norm["dataAplicacaoReal"] = pd.to_datetime(
-            df_alocacoes["dataAplicacaoReal"], dayfirst=True, errors="coerce"
-        )
-    else:
-        df_agendamentos_norm["dataAplicacaoReal"] = df_agendamentos_norm["dataAgendamento"]
-
-    polo_normalizado = (
-        df_agendamentos_norm["polo"]
-        .fillna("")
-        .str.normalize("NFKD")
-        .str.encode("ascii", "ignore")
-        .str.decode("ascii")
-        .str.upper()
-        .str.strip()
-    )
-    df_agendamentos_norm["gRE"] = polo_normalizado.map(POLO_TO_GRE)
-    df_agendamentos_norm["gRE"] = df_agendamentos_norm["gRE"].fillna("GRE NAO IDENTIFICADA")
-    df_agendamentos_norm["gRE"] = df_agendamentos_norm["gRE"].str.upper().str.strip()
-    df_agendamentos_norm["GRE"] = df_agendamentos_norm["gRE"]
-
-    required_ag_cols = [
-        "coEscolaCenso",
-        "escola",
-        "municipio",
-        "polo",
-        "gRE",
-        "dataAgendamento",
-        "dataAplicacaoReal",
-        "qtdAlunosPrevistos",
-        "diaAplicacao",
-        "turno",
-        "serie",
-        "turma",
-    ]
-    for col in required_ag_cols:
-        if col not in df_agendamentos_norm.columns:
-            df_agendamentos_norm[col] = pd.NA
-    df_agendamentos_norm = df_agendamentos_norm[required_ag_cols + ["GRE"]]
-
-    df_agendamentos_norm.to_parquet(PROCESSADO_DIR / "base_agendamentos.parquet", index=False)
-    st.download_button(
-        label="⬇️ Baixar arquivo processado",
-        data=gerar_bytes_parquet(df_agendamentos_norm),
-        file_name="base_agendamentos.parquet",
-        mime="application/octet-stream",
-    )
-    st.success("Base de Alocacoes processada com sucesso.")
-
-    # Percentual de Presenca
-    df_presenca = pd.read_excel(base_presenca)
-    norm_map_presenca = {normalizar_nome(c): c for c in df_presenca.columns}
-
-    if "codigoescola" in norm_map_presenca:
-        df_presenca = df_presenca.rename(columns={norm_map_presenca["codigoescola"]: "coEscolaCenso"})
-    if "coEscolaCenso" not in df_presenca.columns:
-        df_presenca["coEscolaCenso"] = pd.NA
-    df_presenca["coEscolaCenso"] = df_presenca["coEscolaCenso"].astype(str).str.strip()
-
-    if "municipio" not in df_presenca.columns:
-        df_presenca["municipio"] = None
-
-    if "gre" in norm_map_presenca:
-        df_presenca = df_presenca.rename(columns={norm_map_presenca["gre"]: "gRE"})
-    if "gRE" not in df_presenca.columns:
-        df_presenca["gRE"] = pd.NA
-    df_presenca["gRE"] = df_presenca["gRE"].apply(normalize_upper)
-    df_presenca["GRE"] = df_presenca["gRE"]
-
-    if "datareal" in norm_map_presenca:
-        df_presenca = df_presenca.rename(columns={norm_map_presenca["datareal"]: "dataAplicacaoReal"})
-    if "dataAplicacaoReal" in df_presenca.columns:
-        df_presenca["dataAplicacaoReal"] = pd.to_datetime(
-            df_presenca["dataAplicacaoReal"], dayfirst=True, errors="coerce"
-        )
-    else:
-        df_presenca["dataAplicacaoReal"] = pd.NaT
-
-    if "diaaplicacao" in norm_map_presenca:
-        df_presenca = df_presenca.rename(columns={norm_map_presenca["diaaplicacao"]: "diaAplicacao"})
-    if "diaAplicacao" not in df_presenca.columns:
-        df_presenca["diaAplicacao"] = pd.NA
-    df_presenca["diaAplicacao"] = df_presenca["diaAplicacao"].astype(str).str.strip()
-
-    if "percentual" not in df_presenca.columns:
-        df_presenca["percentual"] = pd.NA
-    df_presenca["percentual"] = pd.to_numeric(df_presenca["percentual"], errors="coerce")
-
-    if "qtdAlunosPrevistos" not in df_presenca.columns:
-        df_presenca["qtdAlunosPrevistos"] = pd.NA
-    if "qtdAlunosPresentes" not in df_presenca.columns:
-        df_presenca["qtdAlunosPresentes"] = pd.NA
-    df_presenca["qtdAlunosPrevistos"] = pd.to_numeric(
-        df_presenca["qtdAlunosPrevistos"], errors="coerce"
-    ).astype("Int64")
-    df_presenca["qtdAlunosPresentes"] = pd.to_numeric(
-        df_presenca["qtdAlunosPresentes"], errors="coerce"
-    ).astype("Int64")
-
-    norm_map_estrutural = {normalizar_nome(c): c for c in df_estrutural.columns}
-
-    if "coEscolaCenso" not in df_estrutural.columns:
-        alt_co = norm_map_estrutural.get("coescolacenso")
-        df_estrutural["coEscolaCenso"] = df_estrutural[alt_co] if alt_co else pd.NA
-    if "escola" not in df_estrutural.columns:
-        alt_escola = norm_map_estrutural.get("escola")
-        df_estrutural["escola"] = df_estrutural[alt_escola] if alt_escola else pd.NA
-    if "polo" not in df_estrutural.columns:
-        alt_polo = norm_map_estrutural.get("polo")
-        df_estrutural["polo"] = df_estrutural[alt_polo] if alt_polo else pd.NA
-
-    df_estrutural["coEscolaCenso"] = df_estrutural["coEscolaCenso"].astype(str).str.strip()
-
-    df_presenca = df_presenca.merge(
-        df_estrutural[["coEscolaCenso", "escola", "polo"]],
-        on="coEscolaCenso",
-        how="left",
-    )
-
-    for col in ["escola", "polo", "municipio", "gRE"]:
-        if col not in df_presenca.columns:
-            df_presenca[col] = pd.NA
-
-    df_presence_norm = df_presenca[
-        [
-            "coEscolaCenso",
-            "escola",
-            "municipio",
-            "polo",
-            "gRE",
-            "qtdAlunosPrevistos",
-            "qtdAlunosPresentes",
-            "percentual",
-            "diaAplicacao",
-            "dataAplicacaoReal",
-        ]
-    ].copy()
-
-    df_presence_norm.to_parquet(PROCESSADO_DIR / "base_percentual_presenca.parquet", index=False)
-    st.download_button(
-        label="⬇️ Baixar arquivo processado",
-        data=gerar_bytes_parquet(df_presence_norm),
-        file_name="base_percentual_presenca.parquet",
-        mime="application/octet-stream",
-    )
-    st.success("Base de Presenca processada com sucesso.")
-
-    # Registros Pendentes
-    df_pendentes = pd.read_excel(base_pendentes)
+    df_estrutural_normalizado.to_parquet(PROCESSADO_DIR / "base_estrutural_normalizado.parquet", index=False)
+    df_agendamentos.to_parquet(PROCESSADO_DIR / "base_agendamentos.parquet", index=False)
+    df_presenca.to_parquet(PROCESSADO_DIR / "base_percentual_presenca.parquet", index=False)
     df_pendentes.to_parquet(PROCESSADO_DIR / "base_registros_pendentes.parquet", index=False)
-    st.download_button(
-        label="⬇️ Baixar arquivo processado",
-        data=gerar_bytes_parquet(df_pendentes),
-        file_name="base_registros_pendentes.parquet",
-        mime="application/octet-stream",
-    )
-    st.success("Base de Registros Pendentes processada com sucesso.")
 
-    st.success("Loader padronizado com sucesso (Estrutural, Agendamentos e Presenca).")
+    st.session_state["loader_ok"] = True
+    st.session_state["arquivos_processados"] = {
+        "estrutural": df_estrutural,
+        "agendamentos": df_agendamentos,
+        "presenca": df_presenca,
+        "pendentes": df_pendentes,
+    }
 
 
 def render_upload_tab(title: str, prefix: str, folder: Path, folder_display: str) -> None:
     st.subheader(f"Upload de {title}")
-    uploaded_file = st.file_uploader(
-        "Selecione o arquivo (.xlsx)",
-        type=["xlsx"],
-        accept_multiple_files=False,
-        key=f"uploader_{prefix}",
-    )
+    uploaded_file = st.file_uploader("Selecione o arquivo (.xlsx)", type=["xlsx"], accept_multiple_files=False, key=f"uploader_{prefix}")
 
     if uploaded_file is not None:
-        saved_path, saved_time = save_uploaded_file(uploaded_file, folder, prefix)
-        dt_br = format_timestamp_brazil(saved_time)
-        st.markdown(
-            f"""
-<div style="
-    margin-top:15px;
-    margin-bottom:25px;
-    padding:14px 18px;
-    background-color:#e8f1ff;
-    border-radius:10px;
-    border:1px solid #9db5ff;
-    font-size:1rem;
-    font-weight:600;
-    color:#0f2a47;">
-📂 Pasta: {folder_display}<br>
-📄 Arquivo salvo: {saved_path.name}<br>
-⏰ Enviado em: {dt_br}
-</div>
-""",
-            unsafe_allow_html=True,
-        )
+        saved_path = save_uploaded_file(uploaded_file, folder, prefix)
+        st.success(f"Arquivo salvo em {folder_display} como {saved_path.name}")
 
     render_history(folder)
     render_delete_section(folder, prefix)
 
 
-st.title("Base de Dados – Atualizacoes SIAVE 2025")
-st.caption(
-    "Pagina restrita a equipe tecnica. Use esta interface para atualizar as bases que alimentam os dashboards."
-)
-
-senha = st.text_input("Senha de acesso", type="password")
-
-if not senha:
-    st.info("Digite a senha para liberar os envios.")
-    st.stop()
-
-if senha != PASSWORD_CORRECT:
-    st.error("Senha incorreta")
-    st.stop()
-
-abas = st.tabs(
-    [
-        "Base Estrutural",
-        "Alocacoes",
-        "Percentual de Presenca",
-        "Registros Pendentes",
-        "Executar Loader",
-    ]
-)
-
-for tab, config in zip(abas, UPLOAD_CONFIGS):
-    with tab:
-        render_upload_tab(
-            title=config["title"],
-            prefix=config["prefix"],
-            folder=config["folder"],
-            folder_display=config["folder_display"],
-        )
-
-with abas[-1]:
+def render_loader_section() -> None:
     st.subheader("Executar Loader")
-    if st.button("Processar Bases e Gerar Arquivos .parquet"):
-        process_bases()
+    if st.session_state.get("loader_ok"):
+        st.success("Bases ja processadas. Utilize os botoes para download ou reprocese se necessario.")
+    else:
+        st.info("Clique em Executar Loader para processar os arquivos mais recentes.")
+
+    if st.button("Executar Loader", type="primary"):
+        with st.spinner("Processando bases..."):
+            process_bases()
+
+    if st.session_state.get("loader_ok") and st.session_state.get("arquivos_processados"):
+        dados = st.session_state["arquivos_processados"]
+        col1, col2 = st.columns(2)
+        with col1:
+            st.download_button(
+                "Baixar base_estrutural.parquet",
+                data=gerar_bytes_parquet(dados["estrutural"]),
+                file_name="base_estrutural.parquet",
+            )
+            st.download_button(
+                "Baixar base_agendamentos.parquet",
+                data=gerar_bytes_parquet(dados["agendamentos"]),
+                file_name="base_agendamentos.parquet",
+            )
+        with col2:
+            st.download_button(
+                "Baixar base_percentual_presenca.parquet",
+                data=gerar_bytes_parquet(dados["presenca"]),
+                file_name="base_percentual_presenca.parquet",
+            )
+            st.download_button(
+                "Baixar base_registros_pendentes.parquet",
+                data=gerar_bytes_parquet(dados["pendentes"]),
+                file_name="base_registros_pendentes.parquet",
+            )
+
+
+def init_state() -> None:
+    st.session_state.setdefault("loader_ok", False)
+    st.session_state.setdefault("arquivos_processados", {})
+    load_existing_outputs()
+
+
+def main() -> None:
+    init_state()
+
+    st.title("Base de Dados - Atualizacoes SIAVE 2025")
+    st.caption("Area restrita para upload e processamento das bases utilizadas nos dashboards.")
+
+    senha = st.text_input("Senha de acesso", type="password")
+    if not senha:
+        st.info("Digite a senha para liberar as acoes.")
+        st.stop()
+    if senha != PASSWORD_CORRECT:
+        st.error("Senha incorreta")
+        st.stop()
+
+    abas = st.tabs(
+        [
+            "Base Estrutural",
+            "Alocacoes",
+            "Percentual de Presenca",
+            "Registros Pendentes",
+            "Executar Loader",
+        ]
+    )
+
+    for tab, config in zip(abas, UPLOAD_CONFIGS):
+        with tab:
+            render_upload_tab(
+                title=config["title"],
+                prefix=config["prefix"],
+                folder=config["folder"],
+                folder_display=config["folder_display"],
+            )
+
+    with abas[-1]:
+        render_loader_section()
+
+
+if __name__ == "__main__":
+    main()
