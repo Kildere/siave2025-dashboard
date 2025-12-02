@@ -434,6 +434,16 @@ def process_bases():
         df_presenca["qtdAlunosPresentes"], errors="coerce"
     ).astype("Int64")
 
+    df_presenca = df_presenca.merge(
+        df_estrutural[["coEscolaCenso", "escola", "polo"]],
+        on="coEscolaCenso",
+        how="left",
+    )
+
+    for col in ["escola", "polo", "municipio", "gRE"]:
+        if col not in df_presenca.columns:
+            df_presenca[col] = pd.NA
+
     df_presence_norm = df_presenca[
         [
             "coEscolaCenso",
