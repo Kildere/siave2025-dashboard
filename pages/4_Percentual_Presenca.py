@@ -1,137 +1,48 @@
-import streamlit as st
+from datetime import datetime
+from pathlib import Path
+
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
-from pathlib import Path
-from io import BytesIO
-import unicodedata
-import math
-from datetime import datetime
+import streamlit as st
 
-# ======================
-# CONFIGURAÇÕES DA PÁGINA
-# ======================
-st.set_page_config(page_title="Registro de Aplicações – Presença por Data da Aplicação", layout="wide")
+from src.data_paths import ARQ_BASE_AGENDAMENTOS
+from src.utils import format_timestamp_brazil
 
 DATA_PROCESSADO = Path("data/processado")
-UPLOAD_PATH = DATA_PROCESSADO / "Registro_Aplicacoes.xlsx"
 PRESENCE_PARQUET = DATA_PROCESSADO / "base_percentual_presenca.parquet"
 
-from src.data_paths import ARQ_BASE_APLICACOES
+EXPECTED_COLS = [
+    "coEscolaCenso",
+    "escola",
+    "municipio",
+    "polo",
+    "GRE",
+    "dataAplicacaoReal",
+    "previstos",
+    "presentes",
+    "percentual",
+    "dia",
+    "mes",
+]
 
-TEAM_GRE_GROUPS = {
-    "Equipe 1 - Iara e Sely": {"1", "12", "16"},
-    "Equipe 2 - Rodrigo e Kildere": {"7", "9", "10", "11"},
-    "Equipe 3 - Andrea e Juvaneide": {"8", "13", "6", "5"},
-    "Equipe 4 - Angelica e Janaina": {"3", "4", "2", "14", "15"},
-}
-TEAM_POLO_GROUPS = {
-    "Equipe 1 - Iara e Sely": {
-        "ITABAIANA 01",
-        "ITABAIANA 02",
-        "JOAO PESSOA 01",
-        "JOAO PESSOA 02",
-        "JOAO PESSOA 03",
-        "JOAO PESSOA 04",
-        "JOAO PESSOA 05",
-        "JOAO PESSOA 06",
-        "JOAO PESSOA 07",
-        "SANTA RITA 01",
-        "SANTA RITA 02",
-        "SANTA RITA 03",
-        "SANTA RITA 4",
-        "SANTA RITA 5",
-        "SANTA RITA 6",
-        "SANTA RITA 7",
-    },
-    "Equipe 2 - Rodrigo e Kildere": {
-        "CAJAZEIRAS 01",
-        "CAJAZEIRAS 02",
-        "ITAPORANGA 01",
-        "ITAPORANGA 02",
-        "PRINCESA ISABEL",
-        "SOUSA 01",
-        "SOUSA 02",
-    },
-    "Equipe 3 - Andrea e Juvaneide": {
-        "CATOLE DO ROCHA 01",
-        "CATOLE DO ROCHA 02",
-        "MONTEIRO 01",
-        "MONTEIRO 02",
-        "PATOS 01",
-        "PATOS 02",
-        "PATOS 03",
-        "POMBAL",
-    },
-    "Equipe 4 - Angelica e Janaina": {
-        "CAMPINA GRANDE 01",
-        "CAMPINA GRANDE 02",
-        "CAMPINA GRANDE 03",
-        "CAMPINA GRANDE 04",
-        "CAMPINA GRANDE 05",
-        "CAMPINA GRANDE 06",
-        "CAMPINA GRANDE 07",
-        "CAMPINA GRANDE 08",
-        "CAMPINA GRANDE 09",
-        "CUITE 01",
-        "CUITE 02",
-        "GUARABIRA 01",
-        "GUARABIRA 02",
-        "GUARABIRA 03",
-        "GUARABIRA 04",
-        "MAMANGUAPE 01",
-        "MAMANGUAPE 02",
-        "QUEIMADAS 01",
-        "QUEIMADAS 02",
-        "QUEIMADAS 03",
-    },
-}
-
-SENHA_CORRETA = "A9C3B"
-
-# ======================
-# FUNÇÕES AUXILIARES
-# ======================
-
-def normalize_col(name: str) -> str:
-    nfkd = unicodedata.normalize("NFKD", name)
-    no_accents = "".join(c for c in nfkd if not unicodedata.combining(c))
-    clean = (
-        no_accents.strip()
-        .lower()
-        .replace(" ", "")
-        .replace("_", "")
-        .replace("-", "")
-    )
-    return clean
-
-
-def extract_gre_digits(label: str | None) -> str | None:
-    if label is None:
-        return None
-    digits = "".join(ch for ch in str(label) if ch.isdigit())
-    return digits or None
-
-
-def calcular_limite_superior(valor: float | int | None) -> float:
-    if valor is None:
-        return 1.0
-    try:
-        numero = float(valor)
-    except (TypeError, ValueError):
-        return 1.0
-    if numero <= 0:
-        return 1.0
-    return max(1.0, math.ceil(numero * 1.1))
+WEEKDAY_LABELS = [
+    "Segunda",
+    "Terca",
+    "Quarta",
+    "Quinta",
+    "Sexta",
+    "Sabado",
+    "Domingo",
+]
 
 
 def format_int(value: float | int | None) -> str:
     if value is None:
         return "0"
     try:
-        if pd.isna(value):  # type: ignore[arg-type]
+        if pd.isna(value):
             return "0"
-    except TypeError:
+    except Exception:
         return "0"
     try:
         inteiro = int(round(float(value)))
@@ -140,182 +51,178 @@ def format_int(value: float | int | None) -> str:
     return f"{inteiro:,}".replace(",", ".")
 
 
-@st.cache_data
-def load_base_aplicacoes(path: Path = ARQ_BASE_APLICACOES) -> pd.DataFrame:
+def format_percent(value: float | None) -> str:
+    if value is None or pd.isna(value):
+        return "-"
+    return f"{value:.1f}%"
+
+
+def _safe_load_parquet(path: Path) -> pd.DataFrame | None:
     if not path.exists():
-        st.error("Base de aplicações não encontrada.")
-        st.stop()
-    df = pd.read_parquet(path)
-    if "dataAgendmento" in df.columns:
-        df["dataAgendmento"] = pd.to_datetime(df["dataAgendmento"])
+        return None
+    try:
+        return pd.read_parquet(path)
+    except Exception:
+        return None
+
+
+def _prepare_base(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    for col in EXPECTED_COLS:
+        if col not in df.columns:
+            df[col] = pd.NA
+
+    for col in ["coEscolaCenso", "escola", "municipio", "polo", "GRE"]:
+        df[col] = df[col].astype(str).str.strip()
+
+    df["previstos"] = pd.to_numeric(df["previstos"], errors="coerce").fillna(0).astype(int)
+    df["presentes"] = pd.to_numeric(df["presentes"], errors="coerce").fillna(0).astype(int)
+
+    df["percentual"] = pd.to_numeric(df["percentual"], errors="coerce")
+    calc_percentual = (
+        (df["presentes"].astype("float64") / df["previstos"].astype("float64")) * 100
+    ).where(df["previstos"] > 0)
+    df["percentual"] = df["percentual"].combine_first(calc_percentual)
+
+    df["dataAplicacaoReal"] = pd.to_datetime(df["dataAplicacaoReal"], errors="coerce")
+    df["dia"] = pd.to_numeric(df["dia"], errors="coerce")
+    df["mes"] = pd.to_numeric(df["mes"], errors="coerce")
+    if "dataAplicacaoReal" in df.columns:
+        df["ano"] = df["dataAplicacaoReal"].dt.year
+        df["dia"] = df["dataAplicacaoReal"].dt.day
+        df["mes"] = df["dataAplicacaoReal"].dt.month
+        df["dia_da_semana"] = df["dataAplicacaoReal"].dt.weekday.map(
+            lambda x: WEEKDAY_LABELS[x] if pd.notna(x) and x < len(WEEKDAY_LABELS) else None
+        )
+        iso_week = df["dataAplicacaoReal"].dt.isocalendar()
+        df["semana"] = iso_week.week.astype("Int64")
+        df["dataStr"] = df["dataAplicacaoReal"].dt.strftime("%d/%m/%Y")
+    else:
+        df["ano"] = pd.NA
+        df["dia_da_semana"] = pd.NA
+        df["semana"] = pd.NA
+        df["dataStr"] = "-"
     return df
 
 
-def process_presence_file(path: Path) -> pd.DataFrame:
-    df = pd.read_excel(path)
-    df.columns = [normalize_col(c) for c in df.columns]
-
-    required = {"codigoescola", "aplicacao", "qtdalunospresentes", "qtdalunosprevistos"}
-    if not required.issubset(df.columns):
-        raise ValueError(f"Arquivo {path.name} sem colunas necessárias: {required}")
-
-    df["qtdalunosprevistos"] = pd.to_numeric(df["qtdalunosprevistos"], errors="coerce").astype("Int64")
-    df["qtdalunospresentes"] = pd.to_numeric(df["qtdalunospresentes"], errors="coerce").astype("Int64")
-    df["aplicacaoid"] = (
-        df["codigoescola"].astype(str).str.strip()
-        + "_"
-        + df["aplicacao"].astype(str).str.strip()
-    )
-    aggregated = (
-        df.groupby("aplicacaoid", as_index=False)
-        .agg(
-            qtdPrevistos=("qtdalunosprevistos", "sum"),
-            qtdPresentes=("qtdalunospresentes", "sum"),
-        )
-    )
-    aggregated["presenceKey"] = aggregated["aplicacaoid"]
-    aggregated["origem"] = path.name
-    aggregated["percentual"] = (
-        (
-            aggregated["qtdPresentes"].astype("float64")
-            / aggregated["qtdPrevistos"].astype("float64")
-        )
-        * 100
-    ).where(aggregated["qtdPrevistos"] > 0)
-    return aggregated
-
-
-def process_registro_planilha(path: Path = UPLOAD_PATH) -> pd.DataFrame | None:
-    if not path.exists():
+@st.cache_data
+def load_agendamentos() -> pd.DataFrame | None:
+    df = _safe_load_parquet(ARQ_BASE_AGENDAMENTOS)
+    if df is None:
         return None
-    try:
-        df = pd.read_excel(path)
-    except Exception:
+    return _prepare_base(df)
+
+
+@st.cache_data
+def load_presence() -> pd.DataFrame | None:
+    df = _safe_load_parquet(PRESENCE_PARQUET)
+    if df is None:
         return None
-    df.columns = [normalize_col(c) for c in df.columns]
-    required = {"codigoescola", "aplicacao", "qtdalunosprevistos", "qtdalunospresentes"}
-    missing = [col for col in required if col not in df.columns]
-    if missing:
-        return None
-    df["qtdalunosprevistos"] = pd.to_numeric(df["qtdalunosprevistos"], errors="coerce").astype("Int64")
-    df["qtdalunospresentes"] = pd.to_numeric(df["qtdalunospresentes"], errors="coerce").astype("Int64")
-    if "percentual" in df.columns:
-        percent_series = (
-            df["percentual"]
-            .astype(str)
-            .str.replace("%", "", regex=False)
-            .str.replace(",", ".", regex=False)
-        )
-        df["percentual_calc"] = pd.to_numeric(percent_series, errors="coerce")
-    else:
-        prev = df["qtdalunosprevistos"].astype("float64")
-        pres = df["qtdalunospresentes"].astype("float64")
-        df["percentual_calc"] = (pres / prev * 100).where(prev > 0)
-    df["aplicacaoid"] = (
-        df["codigoescola"].astype(str).str.strip()
-        + "_"
-        + df["aplicacao"].astype(str).str.strip()
-    )
-    aggregated = (
-        df.groupby("aplicacaoid", as_index=False)
-        .agg(
-            qtdPrevistos=("qtdalunosprevistos", "sum"),
-            qtdPresentes=("qtdalunospresentes", "sum"),
-        )
-    )
-    aggregated["presenceKey"] = aggregated["aplicacaoid"]
-    aggregated["percentual"] = (
-        (
-            aggregated["qtdPresentes"].astype("float64")
-            / aggregated["qtdPrevistos"].astype("float64")
-        )
-        * 100
-    ).where(aggregated["qtdPrevistos"] > 0)
-    aggregated["origem"] = path.name
-    return aggregated
+    return _prepare_base(df)
 
 
-def load_presence_data(path: Path = PRESENCE_PARQUET) -> tuple[pd.DataFrame | None, str | None]:
-    if not path.exists():
-        return None, None
-    try:
-        df = pd.read_parquet(path)
-    except Exception:
-        return None, None
-    return df, path.name
+def merge_bases(df_ag: pd.DataFrame, df_presence: pd.DataFrame | None) -> pd.DataFrame:
+    df_base = df_ag.copy()
+    df_base["coEscolaCenso"] = df_base["coEscolaCenso"].astype(str).str.strip()
+    if df_presence is None or df_presence.empty:
+        return df_base
 
-def merge_presence(base_df: pd.DataFrame, presence_df: pd.DataFrame | None) -> pd.DataFrame:
-    df = base_df.copy()
-    df["presenceKey"] = (
-        df["coEscolaCenso"].astype(str).str.strip()
-        + "_"
-        + df["diaAplicacao"].astype(str).str.strip()
-    )
-    if presence_df is None or presence_df.empty:
-        df["qtdPrevistos"] = pd.NA
-        df["qtdPresentes"] = pd.NA
-        df["percentual"] = pd.NA
-        return df.drop(columns=["presenceKey"])
-    presence_to_merge = presence_df.copy()
-    if "aplicacaoid" in presence_to_merge.columns:
-        presence_to_merge = presence_to_merge.drop(columns=["aplicacaoid"])
-    merged = df.merge(
-        presence_to_merge,
-        on="presenceKey",
+    df_presence = df_presence.copy()
+    df_presence["coEscolaCenso"] = df_presence["coEscolaCenso"].astype(str).str.strip()
+
+    merged = df_base.merge(
+        df_presence,
+        on="coEscolaCenso",
         how="left",
         suffixes=("", "_presence"),
     )
-    merged = merged.drop(columns=["presenceKey"])
+
+    combine_cols = [
+        "escola",
+        "municipio",
+        "polo",
+        "GRE",
+        "dataAplicacaoReal",
+        "previstos",
+        "presentes",
+        "percentual",
+        "dia",
+        "mes",
+    ]
+    for col in combine_cols:
+        pres_col = f"{col}_presence"
+        if pres_col in merged.columns:
+            merged[col] = merged[pres_col].combine_first(merged[col])
+            merged = merged.drop(columns=[pres_col])
+
+    merged["previstos"] = pd.to_numeric(merged["previstos"], errors="coerce").fillna(0).astype(int)
+    merged["presentes"] = pd.to_numeric(merged["presentes"], errors="coerce").fillna(0).astype(int)
+    merged["percentual"] = pd.to_numeric(merged["percentual"], errors="coerce")
     calc_percentual = (
-        (
-            merged["qtdPresentes"].astype("float64")
-            / merged["qtdPrevistos"].astype("float64")
-        )
-        * 100
-    ).where(merged["qtdPrevistos"].astype("float64") > 0)
-    if "percentual" in merged.columns:
-        merged["percentual"] = merged["percentual"].combine_first(calc_percentual)
-    else:
-        merged["percentual"] = calc_percentual
+        (merged["presentes"].astype("float64") / merged["previstos"].astype("float64")) * 100
+    ).where(merged["previstos"] > 0)
+    merged["percentual"] = merged["percentual"].combine_first(calc_percentual)
+
+    merged["dataAplicacaoReal"] = pd.to_datetime(merged["dataAplicacaoReal"], errors="coerce")
+    merged["ano"] = merged["dataAplicacaoReal"].dt.year
+    merged["dia"] = merged["dataAplicacaoReal"].dt.day
+    merged["mes"] = merged["dataAplicacaoReal"].dt.month
+    merged["dia_da_semana"] = merged["dataAplicacaoReal"].dt.weekday.map(
+        lambda x: WEEKDAY_LABELS[x] if pd.notna(x) and x < len(WEEKDAY_LABELS) else None
+    )
+    iso_week = merged["dataAplicacaoReal"].dt.isocalendar()
+    merged["semana"] = iso_week.week.astype("Int64")
+    merged["dataStr"] = merged["dataAplicacaoReal"].dt.strftime("%d/%m/%Y")
+
     return merged
 
 
-def summarize_percentual(df: pd.DataFrame, group_col: str) -> pd.DataFrame:
+def build_group_percent(df: pd.DataFrame, group_col: str) -> pd.DataFrame:
     if group_col not in df.columns:
         return pd.DataFrame()
     grouped = (
         df.dropna(subset=[group_col])
         .groupby(group_col, as_index=False)
         .agg(
-            previstos=("qtdPrevistos", "sum"),
-            presentes=("qtdPresentes", "sum"),
+            previstos=("previstos", "sum"),
+            presentes=("presentes", "sum"),
         )
     )
     grouped["percentual"] = (
-        (grouped["presentes"].astype("float64") / grouped["previstos"].astype("float64"))
-        * 100
+        (grouped["presentes"].astype("float64") / grouped["previstos"].astype("float64")) * 100
     ).where(grouped["previstos"] > 0)
     grouped["percentual"] = grouped["percentual"].fillna(0)
     grouped = grouped.sort_values("percentual", ascending=False)
-    grouped["percentualFormat"] = grouped["percentual"].map(lambda x: f"{x:.1f}%")
-    grouped["previstos"] = grouped["previstos"].fillna(0).astype(int)
-    grouped["presentes"] = grouped["presentes"].fillna(0).astype(int)
+    grouped["percentualFmt"] = grouped["percentual"].map(lambda x: f"{x:.1f}%")
+    grouped["previstos"] = grouped["previstos"].fillna(0).round().astype(int)
+    grouped["presentes"] = grouped["presentes"].fillna(0).round().astype(int)
     return grouped
 
 
-# ======================
-# INTERFACE
-# ======================
+st.title("Registro de Aplicacoes - Presenca")
 
-st.title("Registro de Aplicações – Presença por Data da Aplicação")
+df_ag = load_agendamentos()
+df_presence = load_presence()
 
-from src.utils import format_timestamp_brazil
+if df_ag is None:
+    st.warning("Parquet base_agendamentos.parquet nao encontrado. Execute o loader para gerar os dados.")
+    st.stop()
 
-arquivo_percentual = PRESENCE_PARQUET
-nome_arq = arquivo_percentual.name if arquivo_percentual.exists() else "Nenhum arquivo encontrado"
-dt_br = (
-    format_timestamp_brazil(datetime.fromtimestamp(arquivo_percentual.stat().st_mtime))
-    if arquivo_percentual.exists()
+if df_presence is None:
+    st.info("Parquet base_percentual_presenca.parquet nao encontrado. Continuando somente com base_agendamentos.")
+
+df = merge_bases(df_ag, df_presence)
+
+nome_ag = ARQ_BASE_AGENDAMENTOS.name if ARQ_BASE_AGENDAMENTOS.exists() else "Nao encontrado"
+dt_ag = (
+    format_timestamp_brazil(datetime.fromtimestamp(ARQ_BASE_AGENDAMENTOS.stat().st_mtime))
+    if ARQ_BASE_AGENDAMENTOS.exists()
+    else "Data nao identificada"
+)
+nome_pres = PRESENCE_PARQUET.name if PRESENCE_PARQUET.exists() else "Nao encontrado"
+dt_pres = (
+    format_timestamp_brazil(datetime.fromtimestamp(PRESENCE_PARQUET.stat().st_mtime))
+    if PRESENCE_PARQUET.exists()
     else "Data nao identificada"
 )
 
@@ -331,164 +238,80 @@ st.markdown(
     font-size:1rem;
     font-weight:600;
     color:#0f2a47;">
-📂 Pasta: {arquivo_percentual.parent}<br>
-🗂️ Arquivo carregado: {nome_arq}<br>
-⏱️ Atualizado em: {dt_br}
+Parquet agendamentos: {nome_ag} (atualizado em {dt_ag})<br>
+Parquet presenca: {nome_pres} (atualizado em {dt_pres})
 </div>
 """,
     unsafe_allow_html=True,
 )
 
-st.caption(
-    "Integração automática entre a base de aplicações e a planilha Percentual_Presença para análise de presença por data real."
-)
-
-# ======================
-# CARREGAR BASE CONSOLIDADA
-# ======================
-
-base_df = load_base_aplicacoes()
-presence_df, _presence_sources = load_presence_data()
-df = merge_presence(base_df, presence_df)
-
-if "dataAgendmento" in df.columns:
-    df["dataAgendmento"] = pd.to_datetime(df["dataAgendmento"], errors="coerce")
-    df["dataFormatada"] = df["dataAgendmento"].dt.strftime("%d/%m/%Y")
-else:
-    df["dataFormatada"] = "-"
-
-# ======================
-# TABELA DE CONVERSÃO DIA → DATA REAL
-# ======================
-
-tabela_conv = (
-    df.groupby(["diaAplicacao", "dataFormatada"])
-    .size()
-    .reset_index()
-    [["diaAplicacao", "dataFormatada"]]
-    .drop_duplicates()
-)
-
-st.subheader("Tabela de Conversão: Dia Aplicação → Data Real")
-st.dataframe(tabela_conv, use_container_width=True)
-
-# ======================
-# PRESENÇA POR POLO > MUNICÍPIO > ESCOLA
-# ======================
-
-# Reaproveita o dataframe consolidado (df) e permite chegar até a escola, com filtro por Polo.
-st.divider()
-st.subheader("Visão por Polo > Município > Escola")
-st.caption(
-    "Fonte: base processada em data/processado/base_percentual_presenca.parquet."
-)
-
-if presence_df is None or presence_df.empty:
-    st.info("Nenhum parquet de percentual de presenca encontrado para montar a visão por Polo.")
+if df.empty:
+    st.info("Nenhum registro encontrado nas bases padronizadas.")
     st.stop()
 
-# Usar os valores originais da planilha de presença (presence_df), vinculando ao Polo/Município/Escola via base.
-base_map = base_df.copy()
-base_map["presenceKey"] = (
-    base_map["coEscolaCenso"].astype(str).str.strip()
-    + "_"
-    + base_map["diaAplicacao"].astype(str).str.strip()
-)
-base_map = base_map[
-    ["presenceKey", "polo", "municipio", "escola"]
-].drop_duplicates(subset=["presenceKey"], keep="last")
+total_previstos = int(df["previstos"].sum())
+total_presentes = int(df["presentes"].sum())
+percentual_geral = (total_presentes / total_previstos * 100) if total_previstos else None
 
-df_pme = presence_df.copy()
-if "percentual" not in df_pme.columns:
-    df_pme["percentual"] = (
-        (df_pme["qtdPresentes"].astype("float64") / df_pme["qtdPrevistos"].astype("float64"))
-        * 100
-    ).where(df_pme["qtdPrevistos"].astype("float64") > 0)
+col1, col2, col3 = st.columns(3)
+col1.metric("Previstos (total)", format_int(total_previstos))
+col2.metric("Presentes (total)", format_int(total_presentes))
+col3.metric("% medio geral", format_percent(percentual_geral))
 
-df_pme = df_pme.merge(base_map, on="presenceKey", how="left")
-df_pme["qtdPrevistos"] = pd.to_numeric(df_pme["qtdPrevistos"], errors="coerce").fillna(0)
-df_pme["qtdPresentes"] = pd.to_numeric(df_pme["qtdPresentes"], errors="coerce").fillna(0)
-df_pme["percentual"] = pd.to_numeric(df_pme["percentual"], errors="coerce").fillna(0)
-df_pme["percentualFmt"] = df_pme["percentual"].map(lambda x: f"{x:.1f}%")
-
-polo_options = ["(Todos)"] + sorted(df_pme["polo"].dropna().astype(str).unique())
-polo_selected = st.selectbox("Filtrar Polo", polo_options, index=0)
-
-if polo_selected != "(Todos)":
-    df_pme = df_pme[df_pme["polo"].astype(str) == polo_selected]
-
-if df_pme.empty:
-    st.info("Nenhum registro encontrado para o filtro de Polo selecionado.")
+st.divider()
+st.subheader("Presenca por GRE")
+percent_gre = build_group_percent(df, "GRE")
+if percent_gre.empty:
+    st.info("Nao ha dados de GRE para exibir.")
 else:
-    total_previstos = int(df_pme["qtdPrevistos"].sum())
-    total_presentes = int(df_pme["qtdPresentes"].sum())
-    percentual_total = (total_presentes / total_previstos * 100) if total_previstos else 0
-    kpi1, kpi2, kpi3 = st.columns(3)
-    kpi1.metric("Previstos (filtro)", f"{total_previstos:,}".replace(",", "."))
-    kpi2.metric("Presentes (filtro)", f"{total_presentes:,}".replace(",", "."))
-    kpi3.metric("% Presença (filtro)", f"{percentual_total:.1f}%")
+    fig_gre = px.bar(
+        percent_gre,
+        x="GRE",
+        y="percentual",
+        text=percent_gre["percentualFmt"],
+        labels={"percentual": "% Presenca", "GRE": "GRE"},
+    )
+    fig_gre.update_layout(yaxis=dict(range=[0, 100]))
+    st.plotly_chart(fig_gre, use_container_width=True)
 
-    # Gráfico de previstos x presentes por Polo
-    agrup_polo = (
-        df_pme.groupby("polo", as_index=False)
-        .agg(previstos=("qtdPrevistos", "sum"), presentes=("qtdPresentes", "sum"))
-    )
-    agrup_polo["percentual"] = (
-        (agrup_polo["presentes"] / agrup_polo["previstos"]) * 100
-    ).where(agrup_polo["previstos"] > 0)
-    agrup_polo["percentual"] = agrup_polo["percentual"].fillna(0)
-
-    st.markdown("#### Previstos x Presentes por Polo")
-    fig_polo = go.Figure()
-    fig_polo.add_bar(
-        name="Previstos",
-        x=agrup_polo["polo"],
-        y=agrup_polo["previstos"],
-        marker_color="#1f77b4",
-        text=[f"{v:,.0f}".replace(",", ".") for v in agrup_polo["previstos"]],
-        textposition="outside",
-        opacity=0.9,
-    )
-    fig_polo.add_bar(
-        name="Presentes",
-        x=agrup_polo["polo"],
-        y=agrup_polo["presentes"],
-        marker_color="#6baed6",
-        text=[f"{v:,.0f}".replace(",", ".") for v in agrup_polo["presentes"]],
-        textposition="outside",
-        opacity=0.85,
-    )
-    fig_polo.update_layout(
-        barmode="group",
-        yaxis_title="Quantidade de alunos",
-        xaxis_title="Polo",
-    )
-    st.plotly_chart(fig_polo, use_container_width=True, key="polo_prev_pres_data_real")
-
-    st.markdown("#### Percentual de Presença por Polo")
-    fig_percentual_polo = px.bar(
-        agrup_polo,
+st.subheader("Presenca por Polo")
+percent_polo = build_group_percent(df, "polo")
+if percent_polo.empty:
+    st.info("Nao ha dados de Polo para exibir.")
+else:
+    fig_polo = px.bar(
+        percent_polo,
         x="polo",
         y="percentual",
-        text=agrup_polo["percentual"].map(lambda x: f"{x:.1f}%"),
-        labels={"percentual": "% Presença", "polo": "Polo"},
+        text=percent_polo["percentualFmt"],
+        labels={"percentual": "% Presenca", "polo": "Polo"},
     )
-    fig_percentual_polo.update_layout(yaxis=dict(range=[0, 100]))
-    st.plotly_chart(fig_percentual_polo, use_container_width=True, key="polo_percentual_data_real")
+    fig_polo.update_layout(yaxis=dict(range=[0, 100]))
+    st.plotly_chart(fig_polo, use_container_width=True)
 
-    # Tabela e mapa hierárquico Polo > Município > Escola
-    tabela_pme = (
-        df_pme.groupby(["polo", "municipio", "escola"], as_index=False)
-        .agg(previstos=("qtdPrevistos", "sum"), presentes=("qtdPresentes", "sum"))
+st.subheader("Evolucao diaria de presenca")
+if "dataAplicacaoReal" not in df.columns or df["dataAplicacaoReal"].dropna().empty:
+    st.info("Sem datas de aplicacao para montar a evolucao diaria.")
+else:
+    daily = (
+        df.dropna(subset=["dataAplicacaoReal"])
+        .copy()
     )
-    tabela_pme["percentual"] = (
-        (tabela_pme["presentes"] / tabela_pme["previstos"]) * 100
-    ).where(tabela_pme["previstos"] > 0)
-    tabela_pme["percentual"] = tabela_pme["percentual"].fillna(0)
-    tabela_pme["percentualFmt"] = tabela_pme["percentual"].map(lambda x: f"{x:.1f}%")
-    tabela_pme["previstos"] = tabela_pme["previstos"].fillna(0).round().astype(int)
-    tabela_pme["presentes"] = tabela_pme["presentes"].fillna(0).round().astype(int)
-
-    st.markdown("#### Tabela detalhada (Polo > Município > Escola)")
-    tabela_mostrar = tabela_pme[["polo", "municipio", "escola", "previstos", "presentes", "percentualFmt"]].copy()
-    st.dataframe(tabela_mostrar, use_container_width=True)
+    daily["diaReal"] = daily["dataAplicacaoReal"].dt.date
+    daily_group = (
+        daily.groupby("diaReal", as_index=False)
+        .agg(previstos=("previstos", "sum"), presentes=("presentes", "sum"))
+    )
+    daily_group["percentual"] = (
+        (daily_group["presentes"].astype("float64") / daily_group["previstos"].astype("float64")) * 100
+    ).where(daily_group["previstos"] > 0)
+    daily_group["percentual"] = daily_group["percentual"].fillna(0)
+    fig_daily = px.line(
+        daily_group,
+        x="diaReal",
+        y="percentual",
+        markers=True,
+        labels={"diaReal": "Data", "percentual": "% Presenca"},
+    )
+    fig_daily.update_layout(yaxis=dict(range=[0, 100]))
+    st.plotly_chart(fig_daily, use_container_width=True)

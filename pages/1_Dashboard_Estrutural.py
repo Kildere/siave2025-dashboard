@@ -1,7 +1,9 @@
-import streamlit as st
+import unicodedata
+from pathlib import Path
+
 import pandas as pd
 import plotly.express as px
-from pathlib import Path
+import streamlit as st
 
 BASE_PARQUET = Path("data/processado/base_estrutural_normalizado.parquet")
 
@@ -17,42 +19,42 @@ except Exception as exc:
     st.error(f"Falha ao ler o parquet processado: {exc}")
     st.stop()
 
-# colunas esperadas DEFINITIVAS
-expected = [
-    "uF",
-    "polo",
-    "coEscolaCenso",
-    "escola",
-    "municipio",
-    "localizacao",
-    "rede",
-    "telefone1",
-    "telefone2",
-    "coTurmaCenso",
-    "turma",
-    "serie",
-    "turno",
-    "observacoesDaEscola",
-    "temCiencias",
-    "qtdDiasAplicacao",
-    "gRE",
-]
+def remove_accents(text):
+    if text is None:
+        return text
+    text = str(text)
+    nfkd = unicodedata.normalize("NFKD", text)
+    return "".join([c for c in nfkd if not unicodedata.combining(c)])
 
-# verificar
-missing = [c for c in expected if c not in df.columns]
+
+# Normalizar coluna GRE padronizada
+if "GRE" not in df.columns:
+    gre_alt = [c for c in df.columns if c.lower() == "gre"]
+    if gre_alt:
+        df = df.rename(columns={gre_alt[0]: "GRE"})
+    else:
+        df["GRE"] = pd.NA
+df["GRE"] = df["GRE"].apply(remove_accents).str.upper().str.strip()
+
+# colunas obrigatórias para exibição
+required = ["municipio", "escola", "polo", "GRE"]
+missing = [c for c in required if c not in df.columns]
 if missing:
-    st.error(f"Colunas ausentes na base: {missing}")
-    st.write("Colunas disponiveis:", list(df.columns))
-    st.stop()
+    st.warning(
+        "Colunas ausentes na base: "
+        + ", ".join(missing)
+        + ". Algumas visões podem ficar incompletas."
+    )
+    for col in missing:
+        df[col] = pd.NA
 
 # KPIs
-col1, col2, col3, col4, col5 = st.columns(5)
+col1, col2, col3, col4 = st.columns(4)
 
-col1.metric("GREs", df["gRE"].nunique())
+col1.metric("GREs", df["GRE"].nunique())
 col2.metric("Polos", df["polo"].nunique())
 col3.metric("Municipios", df["municipio"].nunique())
 col4.metric("Escolas", df["coEscolaCenso"].nunique())
-col5.metric("Turmas", df["coTurmaCenso"].nunique())
 
 st.divider()
 
@@ -60,7 +62,7 @@ st.divider()
 st.subheader("Turmas por GRE")
 
 g1 = (
-    df.groupby("gRE")["coTurmaCenso"]
+    df.groupby("GRE")["coTurmaCenso"]
     .nunique()
     .reset_index(name="total_turmas")
     .sort_values("total_turmas", ascending=True)
@@ -68,11 +70,11 @@ g1 = (
 
 fig = px.bar(
     g1,
-    x="gRE",
+    x="GRE",
     y="total_turmas",
     text_auto=True,
     title="Total de Turmas por GRE",
-    labels={"gRE": "GRE", "total_turmas": "Turmas"},
+    labels={"GRE": "GRE", "total_turmas": "Turmas"},
 )
 
 st.plotly_chart(fig, use_container_width=True)
@@ -82,12 +84,12 @@ st.subheader("Exploracao por GRE")
 
 gre_escolhida = st.selectbox(
     "Selecione a GRE:",
-    ["(Todas)"] + sorted(df["gRE"].dropna().astype(str).unique()),
+    ["(Todas)"] + sorted(df["GRE"].dropna().astype(str).unique()),
 )
 
 # --- Correcao do filtro da GRE ---
 if gre_escolhida != "(Todas)":
-    df = df[df["gRE"].astype(str) == gre_escolhida]
+    df = df[df["GRE"].astype(str) == gre_escolhida]
 
 # --- Visao por Polo ---
 st.subheader("Visao por Polo")

@@ -332,6 +332,27 @@ def process_bases():
     # MAPEAR col coEscolaCenso
     norm_map = {normalizar_nome(c): c for c in df_alocacoes.columns}
 
+    def pick_col(possiveis):
+        for key in possiveis:
+            if key in norm_map:
+                return norm_map[key]
+        return None
+
+    def serie_texto(possiveis):
+        col = pick_col(possiveis)
+        if col is None:
+            return pd.Series(pd.NA, index=df_alocacoes.index, dtype="string")
+        return df_alocacoes[col].astype("string").str.strip()
+
+    def serie_numero(possiveis):
+        col = pick_col(possiveis)
+        if col is None:
+            return pd.Series(pd.NA, index=df_alocacoes.index, dtype="Int64")
+        return pd.to_numeric(df_alocacoes[col], errors="coerce").astype("Int64")
+
+    def limpar_vazios(series: pd.Series) -> pd.Series:
+        return series.replace({"": pd.NA, "nan": pd.NA, "None": pd.NA})
+
     possiveis_coesc = [
         "coescolacenso",
         "codigoescola",
@@ -343,113 +364,178 @@ def process_bases():
         "id_escolacenso",
     ]
 
-    col_codigo = None
-    for key in possiveis_coesc:
-        if key in norm_map:
-            col_codigo = norm_map[key]
-            break
+    df_agendamentos_norm = pd.DataFrame(index=df_alocacoes.index)
+    df_agendamentos_norm["uf"] = limpar_vazios(serie_texto(["uf", "estado"]))
+    df_agendamentos_norm["polo"] = limpar_vazios(serie_texto(["polo"]))
+    df_agendamentos_norm["coEscolaCenso"] = limpar_vazios(serie_texto(possiveis_coesc))
+    df_agendamentos_norm["escola"] = limpar_vazios(serie_texto(["escola", "nomeescola"]))
 
-    if col_codigo is not None:
-        df_alocacoes["coEscolaCenso"] = df_alocacoes[col_codigo]
-    else:
-        df_alocacoes["coEscolaCenso"] = pd.NA
+    municipio_escola = serie_texto(["municipioescola", "municipio"])
+    municipio_polo = serie_texto(["municipiopolo"])
+    municipio_comb = municipio_escola.where(
+        municipio_escola.notna() & (municipio_escola != ""),
+        municipio_polo,
+    )
+    df_agendamentos_norm["municipio"] = limpar_vazios(municipio_comb)
 
-    # MAPEAR col diaAplicacao
-    possiveis_dia = [
-        "diaaplicacao",
-        "dia",
-        "aplicacao",
-        "dataaplicacao",
-        "diaprova",
-        "diateste",
-    ]
+    df_agendamentos_norm["serie"] = limpar_vazios(serie_texto(["serie", "serieano"]))
+    df_agendamentos_norm["turno"] = limpar_vazios(serie_texto(["turno"]))
+    df_agendamentos_norm["turma"] = limpar_vazios(serie_texto(["turma"]))
+    df_agendamentos_norm["coTurmaCenso"] = limpar_vazios(
+        serie_texto(["coturmacenso", "turmacenso", "codturmacenso", "idturma"])
+    )
+    df_agendamentos_norm["tipoAplic"] = limpar_vazios(
+        serie_texto(["tipoaplic", "tipoaplicacao"])
+    )
+    df_agendamentos_norm["statusAplicacao"] = limpar_vazios(
+        serie_texto(["statusaplicacao", "status"])
+    )
+    df_agendamentos_norm["localizacao"] = limpar_vazios(serie_texto(["localizacao"]))
+    df_agendamentos_norm["tipoRede"] = limpar_vazios(serie_texto(["tiporede", "rede"]))
+    df_agendamentos_norm["aplicador"] = limpar_vazios(serie_texto(["aplicador"]))
+    df_agendamentos_norm["cpf"] = limpar_vazios(serie_texto(["cpf", "cpfaplicador"]))
 
-    col_dia = None
-    for key in possiveis_dia:
-        if key in norm_map:
-            col_dia = norm_map[key]
-            break
+    df_agendamentos_norm["qtdAlunosPrevistos"] = serie_numero(
+        ["alocados", "qtdalunos", "qtdalunosprevistos"]
+    )
 
-    if col_dia is not None:
-        df_alocacoes["diaAplicacao"] = df_alocacoes[col_dia]
-    else:
-        df_alocacoes["diaAplicacao"] = pd.NA
-    df_alocacoes = padronizar_colunas_obrigatorias(df_alocacoes)
-    df_alocacoes.to_parquet(PROCESSADO_DIR / "base_agendamentos.parquet", index=False)
+    dia_aplicacao = serie_texto(
+        [
+            "diaaplicacao",
+            "dia",
+            "aplicacao",
+            "dataaplicacao",
+            "diaprova",
+            "diateste",
+        ]
+    )
+    df_agendamentos_norm["diaAplicacao"] = limpar_vazios(dia_aplicacao)
+
+    data_agendamento = serie_texto(
+        ["dataagendamento", "dataagendmento", "agendamento", "dataaplicacao"]
+    )
+    df_agendamentos_norm["dataAgendmento"] = pd.to_datetime(
+        data_agendamento, dayfirst=True, errors="coerce"
+    )
+
+    polo_normalizado = (
+        df_agendamentos_norm["polo"]
+        .fillna("")
+        .str.normalize("NFKD")
+        .str.encode("ascii", "ignore")
+        .str.decode("ascii")
+        .str.upper()
+        .str.strip()
+    )
+    df_agendamentos_norm["gRE"] = polo_normalizado.map(POLO_TO_GRE)
+    df_agendamentos_norm["gRE"] = df_agendamentos_norm["gRE"].fillna("GRE NAO IDENTIFICADA")
+
+    chave_aplicacao = df_agendamentos_norm["coTurmaCenso"].where(
+        df_agendamentos_norm["coTurmaCenso"].notna() & (df_agendamentos_norm["coTurmaCenso"] != ""),
+        df_agendamentos_norm["coEscolaCenso"],
+    )
+    df_agendamentos_norm["aplicacaoId"] = (
+        chave_aplicacao.fillna("").astype(str).str.strip()
+        + "_"
+        + df_agendamentos_norm["diaAplicacao"].fillna("").astype(str).str.strip()
+    ).str.strip("_")
+    df_agendamentos_norm["aplicacaoId"] = df_agendamentos_norm["aplicacaoId"].replace("", pd.NA)
+
+    df_agendamentos_norm.to_parquet(PROCESSADO_DIR / "base_agendamentos.parquet", index=False)
     # -------------------------
     # Botão para baixar parquet
     # -------------------------
     st.download_button(
         label="⬇️ Baixar arquivo processado",
-        data=gerar_bytes_parquet(df_alocacoes),
+        data=gerar_bytes_parquet(df_agendamentos_norm),
         file_name="base_agendamentos.parquet",
         mime="application/octet-stream"
     )
     st.success("Base de Aloca\u00e7\u00f5es processada com sucesso.")
 
-    # Percentual de Presen\u00e7a
+
+    # Percentual de Presença
     df_presenca = pd.read_excel(base_presenca)
-    # -----------------------------------------------------------
-    # Garantir coEscolaCenso na base de aplicações
-    # -----------------------------------------------------------
-    norm_map = {normalizar_nome(c): c for c in df_presenca.columns}
+    norm_map_presenca = {normalizar_nome(c): c for c in df_presenca.columns}
 
-    possiveis_coesc = [
-        "coescolacenso",
-        "codigoescola",
-        "codigocenso",
-        "codescola",
-        "escolacod",
-        "escod",
-        "id_escola",
-        "id_escolacenso",
-    ]
+    def pick_col_presenca(possiveis):
+        for key in possiveis:
+            if key in norm_map_presenca:
+                return norm_map_presenca[key]
+        return None
 
-    col_codigo = None
-    for key in possiveis_coesc:
-        if key in norm_map:
-            col_codigo = norm_map[key]
-            break
+    def serie_texto_presenca(possiveis):
+        col = pick_col_presenca(possiveis)
+        if col is None:
+            return pd.Series(pd.NA, index=df_presenca.index, dtype="string")
+        return df_presenca[col].astype("string").str.strip()
 
-    if col_codigo is not None:
-        df_presenca["coEscolaCenso"] = df_presenca[col_codigo]
-    else:
-        df_presenca["coEscolaCenso"] = pd.NA
+    df_presence_norm = pd.DataFrame(index=df_presenca.index)
+    df_presence_norm["uf"] = limpar_vazios(serie_texto_presenca(["uf", "estado"]))
+    df_presence_norm["polo"] = limpar_vazios(serie_texto_presenca(["polo"]))
+    df_presence_norm["tipoRede"] = limpar_vazios(serie_texto_presenca(["tiporede", "rede"]))
+    df_presence_norm["localizacao"] = limpar_vazios(serie_texto_presenca(["localizacao"]))
+    df_presence_norm["coEscolaCenso"] = limpar_vazios(serie_texto_presenca(
+        [
+            "coescolacenso",
+            "codigoescola",
+            "codigocenso",
+            "codescola",
+            "escolacod",
+            "escod",
+            "id_escola",
+            "id_escolacenso",
+        ]
+    ))
+    df_presence_norm["escola"] = limpar_vazios(serie_texto_presenca(["escola", "nomeescola"]))
+    df_presence_norm["serie"] = limpar_vazios(serie_texto_presenca(["serie", "serieano"]))
 
-    # -----------------------------------------------------------
-    # Garantir diaAplicacao
-    # -----------------------------------------------------------
-    possiveis_dia = [
-        "diaaplicacao",
-        "dia",
-        "aplicacao",
-        "dataaplicacao",
-        "diaprova",
-        "diateste",
-    ]
+    df_presence_norm["qtdAlunosPrevistos"] = pd.to_numeric(
+        serie_texto_presenca(["qtdalunosprevistos", "previstos", "qtd_previstos"]),
+        errors="coerce",
+    ).astype("Int64")
+    df_presence_norm["qtdAlunosPresentes"] = pd.to_numeric(
+        serie_texto_presenca(["qtdalunospresentes", "presentes", "qtd_presentes"]),
+        errors="coerce",
+    ).astype("Int64")
 
-    col_dia = None
-    for key in possiveis_dia:
-        if key in norm_map:
-            col_dia = norm_map[key]
-            break
+    percentual_raw = serie_texto_presenca(["percentual", "percent"])
+    percentual_clean = (
+        percentual_raw.str.replace("%", "", regex=False)
+        .str.replace(",", ".", regex=False)
+    )
+    df_presence_norm["percentual"] = pd.to_numeric(percentual_clean, errors="coerce")
 
-    if col_dia is not None:
-        df_presenca["diaAplicacao"] = df_presenca[col_dia]
-    else:
-        df_presenca["diaAplicacao"] = pd.NA
-    df_presenca = padronizar_colunas_obrigatorias(df_presenca)
-    df_presenca.to_parquet(PROCESSADO_DIR / "base_aplicacoes.parquet", index=False)
+    df_presence_norm["diaAplicacao"] = limpar_vazios(serie_texto_presenca(
+        ["aplicacao", "diaaplicacao", "dia", "dataaplicacao", "diaprova", "diateste"]
+    ))
+
+    data_real_col = serie_texto_presenca(["datareal", "dataaplicacaoreal", "data"])
+    df_presence_norm["dataReal"] = pd.to_datetime(data_real_col, dayfirst=True, errors="coerce")
+
+    polo_normalizado_presenca = (
+        df_presence_norm["polo"]
+        .fillna("")
+        .str.normalize("NFKD")
+        .str.encode("ascii", "ignore")
+        .str.decode("ascii")
+        .str.upper()
+        .str.strip()
+    )
+    df_presence_norm["gRE"] = polo_normalizado_presenca.map(POLO_TO_GRE)
+    df_presence_norm["gRE"] = df_presence_norm["gRE"].fillna("GRE NAO IDENTIFICADA")
+
+    df_presence_norm.to_parquet(PROCESSADO_DIR / "base_percentual_presenca.parquet", index=False)
     # -------------------------
     # Botão para baixar parquet
     # -------------------------
     st.download_button(
         label="⬇️ Baixar arquivo processado",
-        data=gerar_bytes_parquet(df_presenca),
+        data=gerar_bytes_parquet(df_presence_norm),
         file_name="base_percentual_presenca.parquet",
         mime="application/octet-stream"
     )
-    st.success("Base de Presen\u00e7a processada com sucesso.")
+    st.success("Base de Presença processada com sucesso.")
 
     # Registros Pendentes
     df_pendentes = pd.read_excel(base_pendentes)

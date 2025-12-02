@@ -1,84 +1,46 @@
 import ast
 import json
-import re
 import unicodedata
 from pathlib import Path
 
 import pandas as pd
+import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from src.gre_palette import (
-    GRE_COLOR_MAP,
-    gre_order_index,
-    ordered_gre_labels,
-    build_gre_legend_html,
-)
-
-def build_single_gre_legend_html(gre_label: str) -> str:
-    """
-    Gera legenda reduzida exibindo apenas a GRE selecionada,
-    usando o mesmo padrão visual da legenda completa.
-    """
-    try:
-        num = int(gre_label)
-    except:
-        return ""
-
-    color = GRE_COLOR_MAP.get(str(num))
-    if not color:
-        return ""
-
-    nome = f"{num}ª GERÊNCIA REGIONAL DA EDUCAÇÃO"
-
-    return f"""
-    <div style="display:flex; align-items:center; gap:8px; margin:8px 0;">
-        <div style="width:18px; height:18px; background-color:{color};
-                    border-radius:4px; border:1px solid #0002;"></div>
-        <span style="font-size:0.9rem; color:#333; font-weight:600;">
-            {nome}
-        </span>
-    </div>
-    """
+# Paleta de cores qualitativa para as GREs
+DEFAULT_PALETTE = px.colors.qualitative.Safe if px.colors.qualitative.Safe else px.colors.qualitative.Set3
 
 BASE_PARQUET = Path("data/processado/base_estrutural_normalizado.parquet")
 GEOJSON_MUN = Path("src/geojs-25-mun.json")
 
 # Nomes atuais x nomenclatura do geojson (que traz o nome antigo)
 ALIASES_MUNICIPIOS_RAW = {
-    "Joca Claudino": "Santar\u00e9m",
+    "Joca Claudino": "Santarém",
     "Tacima": "Campo de Santana",
-    "S\u00e3o Domingos de Pombal": "S\u00e3o Domingos",
-    "S\u00e3o Vicente do Serido": "Serid\u00f3",
+    "São Domingos de Pombal": "São Domingos",
+    "São Vicente do Serido": "Seridó",
 }
 
 # Dados de logistica (adaptado do rascunho fornecido)
 LOGISTICA_DIR = Path("data/logistica")
 
+st.set_page_config(page_title="Logistica SIAVE 2025", layout="wide")
 
-def normalize(txt: str) -> str:
-    """Remove acentos e padroniza para minusculas/trim."""
+
+def normalize_upper(txt: str) -> str:
+    """Remove acentos, coloca em maiúsculas e tira espaços extras."""
     return (
         unicodedata.normalize("NFKD", str(txt))
         .encode("ascii", "ignore")
         .decode()
-        .lower()
+        .upper()
         .strip()
     )
 
 
-def parse_gre(value) -> str | None:
-    """Extrai o numero da GRE de strings como '11a GRE'."""
-    match = re.search(r"\d+", str(value))
-    return match.group(0) if match else None
-
-
-# Mapas de aliases: um para merge normalizado, outro para exibir com acento
 ALIASES_MUNICIPIOS = {
-    normalize(src): normalize(dst) for src, dst in ALIASES_MUNICIPIOS_RAW.items()
-}
-ALIASES_MUNICIPIOS_DISPLAY = {
-    normalize(src): src for src in ALIASES_MUNICIPIOS_RAW.keys()
+    normalize_upper(src): normalize_upper(dst) for src, dst in ALIASES_MUNICIPIOS_RAW.items()
 }
 
 
@@ -87,7 +49,18 @@ def load_base() -> pd.DataFrame:
     if not BASE_PARQUET.exists():
         st.error("Base processada nao encontrada. Execute o loader primeiro.")
         st.stop()
-    return pd.read_parquet(BASE_PARQUET)
+    df = pd.read_parquet(BASE_PARQUET)
+    gre_cols = [c for c in df.columns if c.lower() == "gre"]
+    if gre_cols:
+        df = df.rename(columns={gre_cols[0]: "GRE"})
+    if "GRE" not in df.columns:
+        df["GRE"] = pd.NA
+    df["GRE"] = df["GRE"].apply(normalize_upper)
+    if "municipio" not in df.columns:
+        df["municipio"] = pd.NA
+    df["municipio_norm"] = df["municipio"].apply(normalize_upper)
+    df["municipio_norm"] = df["municipio_norm"].apply(lambda x: ALIASES_MUNICIPIOS.get(x, x))
+    return df
 
 
 @st.cache_data
@@ -96,7 +69,13 @@ def load_geojson(path: Path) -> dict:
         st.error(f"GeoJSON nao encontrado em {path}")
         st.stop()
     with path.open("r", encoding="utf-8") as f:
-        return json.load(f)
+        geojson = json.load(f)
+    for feat in geojson.get("features", []):
+        props = feat.get("properties", {})
+        name = props.get("name") or props.get("NM_MUN")
+        props["name_norm"] = normalize_upper(name)
+        feat["properties"] = props
+    return geojson
 
 
 @st.cache_data
@@ -107,13 +86,13 @@ def load_info_por_cidade(path: Path = Path("src/Infor_cidades.txt")) -> tuple[di
     text = path.read_text(encoding="utf-8")
     body = text.split("=", 1)[1].strip()
     raw_info = ast.literal_eval(body)
-    norm_map = {normalize(k): v for k, v in raw_info.items()}
+    norm_map = {normalize_upper(k): v for k, v in raw_info.items()}
     return raw_info, norm_map
 
 
 @st.cache_data
 def load_logistica(dir_path: Path = LOGISTICA_DIR) -> pd.DataFrame:
-    """Lê todas as planilhas de logística e normaliza colunas/chaves."""
+    """Le todas as planilhas de logistica e normaliza colunas/chaves."""
     if not dir_path.exists():
         st.error(f"Pasta de logistica nao encontrada: {dir_path}")
         st.stop()
@@ -124,14 +103,12 @@ def load_logistica(dir_path: Path = LOGISTICA_DIR) -> pd.DataFrame:
 
     frames = []
     for f in files:
-        gre_num = "".join(ch for ch in f.stem if ch.isdigit()) or f.stem
         df = pd.read_excel(f)
-        # normalizar nomes de colunas
         df.columns = [
             unicodedata.normalize("NFKD", c).encode("ascii", "ignore").decode().strip()
             for c in df.columns
         ]
-        df["GRE_file"] = gre_num
+        df["GRE_file"] = "".join(ch for ch in f.stem if ch.isdigit()) or f.stem
         frames.append(df)
 
     df_log = pd.concat(frames, ignore_index=True)
@@ -139,57 +116,39 @@ def load_logistica(dir_path: Path = LOGISTICA_DIR) -> pd.DataFrame:
 
 
 def preparar_mapa(df: pd.DataFrame, geojson_mun: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Prepara dataframe com id do municipio e GRE para o choropleth."""
-    geo_records = []
-    for feat in geojson_mun["features"]:
-        props = feat.get("properties", {})
-        name = props.get("name") or props.get("NM_MUN")
-        geo_records.append(
-            {
-                "id": props.get("id"),
-                "name_geo": name,
-                "name_norm": normalize(name),
-            }
-        )
-    geo_df = pd.DataFrame(geo_records)
+    """Prepara dataframe com municipio_norm e GRE para o choropleth."""
+    if df.empty:
+        return pd.DataFrame(columns=["municipio", "GRE", "municipio_norm"]), pd.DataFrame()
 
-    df_mun = df[["municipio", "gRE"]].dropna().copy()
-    df_mun["municipio_base"] = df_mun["municipio"].astype(str)
-    df_mun["name_norm_base"] = df_mun["municipio_base"].apply(normalize)
-    df_mun["name_norm"] = df_mun["name_norm_base"].apply(
-        lambda x: ALIASES_MUNICIPIOS.get(x, x)
-    )
-    df_mun["municipio_display"] = df_mun.apply(
-        lambda row: ALIASES_MUNICIPIOS_DISPLAY.get(
-            row["name_norm_base"], row["municipio_base"]
-        ),
-        axis=1,
-    )
-    df_mun["gRE_label"] = df_mun["gRE"].apply(parse_gre)
-    df_mun["gRE_label"] = df_mun["gRE_label"].fillna(df_mun["gRE"].astype(str))
-    df_mun["gRE_label"] = df_mun["gRE_label"].astype(str)
-    df_mun = df_mun.drop_duplicates(subset=["name_norm"])
+    geo_names = {
+        normalize_upper(feat.get("properties", {}).get("name_norm", ""))
+        for feat in geojson_mun.get("features", [])
+    }
 
-    merged = pd.merge(df_mun, geo_df, on="name_norm", how="left")
-    missing_geo = merged[merged["id"].isna()][
-        ["municipio_base", "gRE", "name_norm"]
+    df_map = (
+        df[["municipio", "GRE", "municipio_norm"]]
+        .dropna(subset=["municipio", "GRE"])
+        .copy()
+    )
+    df_map["municipio_norm"] = df_map["municipio_norm"].apply(lambda x: ALIASES_MUNICIPIOS.get(x, x))
+    df_map["GRE"] = df_map["GRE"].apply(normalize_upper)
+    df_map = df_map.drop_duplicates(subset=["municipio_norm"])
+
+    missing_geo = df_map[~df_map["municipio_norm"].isin(geo_names)][
+        ["municipio", "GRE", "municipio_norm"]
     ]
 
-    merged = merged.dropna(subset=["id"]).copy()
-
-    return merged, missing_geo
+    return df_map, missing_geo
 
 
 def preparar_logistica(df_map: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Concilia dados logísticos com municipios/GREs da base."""
     df_log = load_logistica()
-    # Renomear campos principais para os nomes desejados (Regional -> Polo, Instituicao -> Escola)
     rename_map = {
         "Regional": "Polo",
         "Instituicao": "Escola",
     }
     df_log = df_log.rename(columns=rename_map)
-    # Ajustar campos ausentes nas planilhas (peso/entrega não existem nas abas fornecidas)
     if "PESO" not in df_log.columns:
         df_log["PESO"] = 0
     if "ENTREGA" not in df_log.columns:
@@ -197,61 +156,68 @@ def preparar_logistica(df_map: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame
     if "COD" not in df_log.columns:
         df_log["COD"] = df_log["Pacote"] if "Pacote" in df_log.columns else None
 
-    df_log["municipio_base"] = df_log["Municipio"].astype(str)
-    df_log["name_norm_base"] = df_log["municipio_base"].apply(normalize)
-    df_log["name_norm"] = df_log["name_norm_base"].apply(
-        lambda x: ALIASES_MUNICIPIOS.get(x, x)
-    )
-    df_log = pd.merge(
-        df_log,
-        df_map[
-            ["name_norm", "gRE", "gRE_label", "municipio_display", "municipio_base"]
-        ],
-        on="name_norm",
+    df_log["municipio_norm"] = df_log["Municipio"].apply(normalize_upper)
+    df_log["municipio_norm"] = df_log["municipio_norm"].apply(lambda x: ALIASES_MUNICIPIOS.get(x, x))
+
+    df_log = df_log.merge(
+        df_map[["municipio_norm", "GRE", "municipio"]],
+        on="municipio_norm",
         how="left",
         suffixes=("", "_map"),
     )
-    missing = df_log[df_log["gRE"].isna()][["Municipio", "Polo", "Escola"]]
-    df_log["gRE_label"] = df_log["gRE_label"].fillna("N/A")
-    df_log["municipio_display"] = df_log["municipio_display"].fillna(
-        df_log["Municipio"]
-    )
+    missing = df_log[df_log["GRE"].isna()][["Municipio", "Polo", "Escola"]]
+    df_log["GRE"] = df_log["GRE"].fillna("N/A")
+    df_log["municipio"] = df_log["municipio"].fillna(df_log["Municipio"])
     return df_log, missing
 
 
-def desenhar_mapa(df_map: pd.DataFrame, geojson_mun: dict) -> go.Figure:
-    ordered_labels = ordered_gre_labels(df_map["gRE_label"].unique())
-    if not ordered_labels:
-        return go.Figure()
+def build_palette_legend(labels: list[str], palette: list[str]) -> str:
+    if not labels:
+        return ""
+    items = []
+    for idx, label in enumerate(labels):
+        color = palette[idx % len(palette)]
+        items.append(
+            f"""
+            <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
+                <div style="width:16px;height:16px;background:{color};
+                            border:1px solid #000;border-radius:3px;"></div>
+                <span style="font-size:0.9rem;color:#222;font-weight:600;">{label}</span>
+            </div>
+            """
+        )
+    return "<div style='margin-top:8px;'>" + "\n".join(items) + "</div>"
 
-    label_to_idx = {label: idx for idx, label in enumerate(ordered_labels)}
-    z_values = df_map["gRE_label"].map(label_to_idx)
-    if len(ordered_labels) == 1:
-        single_color = GRE_COLOR_MAP.get(ordered_labels[0], "#888888")
-        colorscale = [(0, single_color), (1, single_color)]
-    else:
-        colorscale = [
-            (idx / (len(ordered_labels) - 1), GRE_COLOR_MAP.get(label, "#888888"))
-            for idx, label in enumerate(ordered_labels)
-        ]
+
+def desenhar_mapa(df_map: pd.DataFrame, geojson_mun: dict) -> tuple[go.Figure, list[str]]:
+    if df_map.empty:
+        return go.Figure(), []
+
+    df_plot = df_map.copy()
+    df_plot["GRE_cat"] = pd.Categorical(df_plot["GRE"])
+    categories = list(df_plot["GRE_cat"].categories)
+    z_values = df_plot["GRE_cat"].codes
+
+    palette = DEFAULT_PALETTE if DEFAULT_PALETTE else ["#636efa"]
+    n_colors = max(len(categories), 1)
+    denom = max(n_colors - 1, 1)
+    colorscale = [
+        (idx / denom, palette[idx % len(palette)]) for idx in range(n_colors)
+    ]
 
     fig = go.Figure(
         go.Choropleth(
             geojson=geojson_mun,
-            featureidkey="properties.id",
-            locations=df_map["id"],
+            featureidkey="properties.name_norm",
+            locations=df_plot["municipio_norm"],
             z=z_values,
-            text=df_map["municipio_display"],
-            customdata=df_map[["municipio_display", "gRE", "municipio_base"]],
-            hovertemplate=(
-                "<b>%{customdata[0]}</b><br>"
-                "GRE: %{customdata[1]}<br>"
-                "Municipio base: %{customdata[2]}<extra></extra>"
-            ),
+            text=df_plot["municipio"],
+            customdata=df_plot[["municipio", "GRE"]],
+            hovertemplate="<b>%{customdata[0]}</b><br>GRE: %{customdata[1]}<extra></extra>",
             colorscale=colorscale,
             showscale=False,
-            marker_line_width=0.6,
-            marker_line_color="white",
+            marker_line_width=0.8,
+            marker_line_color="black",
         )
     )
     fig.update_geos(fitbounds="locations", visible=False)
@@ -261,7 +227,7 @@ def desenhar_mapa(df_map: pd.DataFrame, geojson_mun: dict) -> go.Figure:
         autosize=True,
         showlegend=False,
     )
-    return fig
+    return fig, palette
 
 
 st.title("Logistica - SIAVE 2025")
@@ -278,15 +244,15 @@ info_raw, info_norm = load_info_por_cidade()
 df_map, missing_geo = preparar_mapa(df_base, geojson_mun)
 df_log, missing_log = preparar_logistica(df_map)
 
-available_gres = ordered_gre_labels(df_map["gRE_label"].unique())
+available_gres = sorted(df_map["GRE"].dropna().unique().tolist())
 gre_opcoes = ["(Todas)"] + available_gres
 gre_escolhida = st.selectbox("Filtrar por GRE:", gre_opcoes)
 
 map_df = df_map.copy()
 log_df = df_log.copy()
 if gre_escolhida != "(Todas)":
-    map_df = map_df[map_df["gRE_label"] == gre_escolhida]
-    log_df = log_df[log_df["gRE_label"] == gre_escolhida]
+    map_df = map_df[map_df["GRE"] == gre_escolhida]
+    log_df = log_df[log_df["GRE"] == gre_escolhida]
 
 col_kpi1, col_kpi2, col_kpi3, col_kpi4 = st.columns(4)
 with col_kpi1:
@@ -294,7 +260,7 @@ with col_kpi1:
 with col_kpi2:
     st.metric("Peso total (kg)", f"{log_df['PESO'].sum():,.1f}")
 with col_kpi3:
-    st.metric("GREs cobertas", log_df["gRE_label"].nunique())
+    st.metric("GREs cobertas", log_df["GRE"].nunique())
 with col_kpi4:
     st.metric(
         "Turnos",
@@ -302,21 +268,18 @@ with col_kpi4:
     )
 
 st.subheader("Mapa das GREs (base logistica)")
-fig = desenhar_mapa(map_df, geojson_mun)
+fig, palette = desenhar_mapa(map_df, geojson_mun)
 st.plotly_chart(fig, use_container_width=True, config={"responsive": True})
-# Exibir legenda completa quando todas as GREs estiverem selecionadas
-if gre_escolhida == "(Todas)":
-    st.markdown(build_gre_legend_html(), unsafe_allow_html=True)
-# Exibir legenda reduzida apenas para GRE selecionada
-else:
-    st.markdown(build_single_gre_legend_html(gre_escolhida), unsafe_allow_html=True)
+legend_html = build_palette_legend(sorted(map_df["GRE"].unique()), palette)
+if legend_html:
+    st.markdown(legend_html, unsafe_allow_html=True)
 
 st.subheader("Informacoes do ponto de entrega")
-cidades_opcoes = ["(Selecione)"] + sorted(log_df["municipio_display"].unique())
+cidades_opcoes = ["(Selecione)"] + sorted(log_df["municipio"].dropna().unique())
 cidade_escolhida = st.selectbox("Cidade/GRE", cidades_opcoes)
 
 if cidade_escolhida != "(Selecione)":
-    key = normalize(cidade_escolhida)
+    key = normalize_upper(cidade_escolhida)
     key = ALIASES_MUNICIPIOS.get(key, key)
     html_info = info_norm.get(key)
     if html_info:
@@ -325,7 +288,7 @@ if cidade_escolhida != "(Selecione)":
         st.info("Nenhuma informacao cadastrada para esta cidade no arquivo Infor_cidades.txt.")
 
 if not missing_log.empty or not missing_geo.empty:
-    with st.expander("Avisos de concilia\u00e7\u00e3o"):
+    with st.expander("Avisos de conciliacao"):
         if not missing_log.empty:
             st.warning(
                 "Entregas sem GRE ou municipio encontrado na base: "
@@ -334,5 +297,5 @@ if not missing_log.empty or not missing_geo.empty:
         if not missing_geo.empty:
             st.warning(
                 "Municipios da base sem correspondencia no geojson: "
-                + ", ".join(sorted(set(missing_geo["municipio_base"].astype(str))))
+                + ", ".join(sorted(set(missing_geo["municipio"].astype(str))))
             )
