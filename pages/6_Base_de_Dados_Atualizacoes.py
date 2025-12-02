@@ -252,7 +252,8 @@ def render_delete_section(folder: Path, prefix: str) -> None:
         if target.exists():
             target.unlink()
             st.success("Arquivo removido com sucesso.")
-            st.experimental_rerun()
+            st.session_state["deleted_file"] = True
+            st.stop()
 
 
 def save_uploaded_file(uploaded_file, folder: Path, prefix: str) -> Path:
@@ -522,6 +523,10 @@ def init_state() -> None:
 
 def main() -> None:
     init_state()
+
+    if st.session_state.get("deleted_file"):
+        st.session_state["deleted_file"] = False
+        st.experimental_rerun()
 
     st.title("Base de Dados - Atualizacoes SIAVE 2025")
     st.caption("Area restrita para upload e processamento das bases utilizadas nos dashboards.")
