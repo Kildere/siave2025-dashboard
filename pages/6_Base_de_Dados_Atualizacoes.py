@@ -434,10 +434,10 @@ def process_bases():
         df_presenca["qtdAlunosPresentes"], errors="coerce"
     ).astype("Int64")
 
-    norm_map_estrutural = {normalize_col(c): c for c in df_estrutural.columns}
+    norm_map_estrutural = {normalizar_nome(c): c for c in df_estrutural.columns}
 
     if "coEscolaCenso" not in df_estrutural.columns:
-        alt_co = norm_map_estrutural.get("coEscolaCenso")
+        alt_co = norm_map_estrutural.get("coescolacenso")
         df_estrutural["coEscolaCenso"] = df_estrutural[alt_co] if alt_co else pd.NA
     if "escola" not in df_estrutural.columns:
         alt_escola = norm_map_estrutural.get("escola")
@@ -445,6 +445,8 @@ def process_bases():
     if "polo" not in df_estrutural.columns:
         alt_polo = norm_map_estrutural.get("polo")
         df_estrutural["polo"] = df_estrutural[alt_polo] if alt_polo else pd.NA
+
+    df_estrutural["coEscolaCenso"] = df_estrutural["coEscolaCenso"].astype(str).str.strip()
 
     df_presenca = df_presenca.merge(
         df_estrutural[["coEscolaCenso", "escola", "polo"]],
