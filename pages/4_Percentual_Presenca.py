@@ -13,23 +13,33 @@ PRESENCE_PARQUET = DATA_PROCESSADO / "base_percentual_presenca.parquet"
 
 
 def prep(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Normaliza colunas de agendamentos e presença para o padrão do Loader.
+    """
     df = df.copy()
     df.columns = df.columns.str.strip().str.lower()
+
     rename_map = {
         "coescolacenso": "coEscolaCenso",
         "municipio": "municipio",
         "gre": "gRE",
         "polo": "polo",
+
         "previstos": "previstos",
+        "qtdalunosprevistos": "previstos",
         "presentes": "presentes",
+        "qtdalunospresentes": "presentes",
+
         "percentual": "percentual",
+
         "dataagendamento": "dataAgendamento",
+        "dataagendmento": "dataAgendamento",
         "dataaplicacaoreal": "dataAplicacaoReal",
+        "datareal": "dataAplicacaoReal",
         "qtdiasaplicacao": "qtdDiasAplicacao",
     }
+
     df.rename(columns=rename_map, inplace=True)
-    if "gRE" in df.columns and "GRE" not in df.columns:
-        df = df.rename(columns={"gRE": "GRE"})
     return df
 
 
@@ -86,23 +96,36 @@ if base_df_raw is None:
 base_df = prep(base_df_raw)
 presence_df = prep(presence_df_raw) if presence_df_raw is not None else pd.DataFrame()
 
-def merge_presence(base, presence):
+def merge_presence(base: pd.DataFrame, presence: pd.DataFrame) -> pd.DataFrame:
+    """
+    Junta agendamentos (base) com presença (presence) usando o padrão do Loader.
+    Chaves do merge: coEscolaCenso + municipio + gRE + polo.
+    """
+    if base is None or base.empty:
+        return base
+
     if presence is None or presence.empty:
         df = base.copy()
-        for col in ["presentes", "previstos", "percentual", "dataAplicacaoReal"]:
+        for col in ["previstos", "presentes", "percentual", "dataAplicacaoReal"]:
             if col not in df.columns:
-                df[col] = 0 if col in ["presentes", "previstos", "percentual"] else ""
+                df[col] = pd.NA
         return df
+
     df = base.merge(
         presence,
         on=["coEscolaCenso", "municipio", "gRE", "polo"],
         how="left",
         suffixes=("", "_pres"),
     )
-    df["presentes"] = df["presentes"].fillna(0)
-    df["previstos"] = df["previstos"].fillna(0)
-    df["percentual"] = df["percentual"].fillna(0)
-    df["dataAplicacaoReal"] = df["dataAplicacaoReal"].fillna("")
+
+    for col in ["previstos", "presentes", "percentual", "dataAplicacaoReal"]:
+        pres_col = f"{col}_pres"
+        if pres_col in df.columns:
+            df[col] = df[pres_col].where(df[pres_col].notna(), df.get(col))
+            df.drop(columns=[pres_col], inplace=True)
+        elif col not in df.columns:
+            df[col] = pd.NA
+
     return df
 
 

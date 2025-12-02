@@ -31,20 +31,39 @@ TEAM_GRE_GROUPS = {
 
 
 def prep(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Normaliza colunas para o padrão do Loader, aceitando tanto esquemas novos
+    (parquet) quanto planilhas antigas.
+    """
     df = df.copy()
     df.columns = df.columns.str.strip().str.lower()
+
     rename_map = {
+        # chaves básicas
         "coescolacenso": "coEscolaCenso",
         "municipio": "municipio",
         "gre": "gRE",
         "polo": "polo",
+
+        # previstos / presentes podem vir com nomes antigos ou novos
         "previstos": "previstos",
+        "qtdalunosprevistos": "previstos",
         "presentes": "presentes",
+        "qtdalunospresentes": "presentes",
+
+        # percentual
         "percentual": "percentual",
+
+        # datas
         "dataagendamento": "dataAgendamento",
+        "dataagendmento": "dataAgendamento",
         "dataaplicacaoreal": "dataAplicacaoReal",
+        "datareal": "dataAplicacaoReal",
+
+        # eventual suporte
         "qtdiasaplicacao": "qtdDiasAplicacao",
     }
+
     df.rename(columns=rename_map, inplace=True)
     return df
 
@@ -144,22 +163,35 @@ def format_percent(value: float | None) -> str:
 
 
 def merge_presence(base: pd.DataFrame, presence: pd.DataFrame) -> pd.DataFrame:
+    """
+    Junta agendamentos (base) com presença (presence) usando o padrão do Loader.
+    Chaves do merge: coEscolaCenso + municipio + gRE + polo.
+    """
+    if base is None or base.empty:
+        return base
+
     if presence is None or presence.empty:
         df = base.copy()
-        for col in ["presentes", "previstos", "percentual", "dataAplicacaoReal"]:
+        for col in ["previstos", "presentes", "percentual", "dataAplicacaoReal"]:
             if col not in df.columns:
-                df[col] = 0 if col in ["presentes", "previstos", "percentual"] else ""
+                df[col] = pd.NA
         return df
+
     df = base.merge(
         presence,
         on=["coEscolaCenso", "municipio", "gRE", "polo"],
         how="left",
         suffixes=("", "_pres"),
     )
-    df["presentes"] = df["presentes"].fillna(0)
-    df["previstos"] = df["previstos"].fillna(0)
-    df["percentual"] = df["percentual"].fillna(0)
-    df["dataAplicacaoReal"] = df["dataAplicacaoReal"].fillna("")
+
+    for col in ["previstos", "presentes", "percentual", "dataAplicacaoReal"]:
+        pres_col = f"{col}_pres"
+        if pres_col in df.columns:
+            df[col] = df[pres_col].where(df[pres_col].notna(), df.get(col))
+            df.drop(columns=[pres_col], inplace=True)
+        elif col not in df.columns:
+            df[col] = pd.NA
+
     return df
 
 
