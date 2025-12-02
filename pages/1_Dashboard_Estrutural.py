@@ -6,18 +6,31 @@ import plotly.express as px
 import streamlit as st
 
 BASE_PARQUET = Path("data/processado/base_estrutural_normalizado.parquet")
+from src.firebase_client import load_collection_df
 
 st.title("Dashboard Estrutural - SIAVE 2025")
 
-if not BASE_PARQUET.exists():
-    st.error("Parquet nao encontrado. Execute o loader primeiro.")
-    st.stop()
 
-try:
-    df = pd.read_parquet(BASE_PARQUET)
-except Exception as exc:
-    st.error(f"Falha ao ler o parquet processado: {exc}")
-    st.stop()
+@st.cache_data(show_spinner=False)
+def load_base_estrutural() -> pd.DataFrame:
+    # 1) Tenta Firestore
+    df_fs = load_collection_df("siave_estrutural")
+    if df_fs is not None and not df_fs.empty:
+        return df_fs
+
+    # 2) Fallback para parquet local
+    if not BASE_PARQUET.exists():
+        st.error("Base estrutural não encontrada. Execute o loader para gerar os dados.")
+        st.stop()
+
+    try:
+        return pd.read_parquet(BASE_PARQUET)
+    except Exception as exc:
+        st.error(f"Falha ao ler o parquet processado: {exc}")
+        st.stop()
+
+
+df = load_base_estrutural()
 
 def remove_accents(text):
     if text is None:

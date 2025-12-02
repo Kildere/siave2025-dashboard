@@ -6,6 +6,7 @@ import streamlit as st
 
 from src.data_paths import ARQ_BASE_AGENDAMENTOS
 from src.utils import format_timestamp_brazil
+from src.firebase_client import load_collection_df
 
 MONTH_ABBR_PT = [
     "jan",
@@ -142,12 +143,24 @@ def build_calendar_table(
 
 @st.cache_data
 def load_base_agendamentos(path: Path = ARQ_BASE_AGENDAMENTOS) -> pd.DataFrame:
+    # 1) Tenta Firestore
+    df_fs = load_collection_df("siave_agendamentos")
+    if df_fs is not None and not df_fs.empty:
+        df_fs.columns = df_fs.columns.str.strip()
+        return df_fs
+
+    # 2) Fallback para parquet
     if not path.exists():
-        st.error("Base de agendamentos nao encontrada. Execute o loader antes.")
+        st.error("Base de agendamentos não encontrada. Execute o loader antes.")
         st.stop()
-    df = pd.read_parquet(path)
-    df.columns = df.columns.str.strip()
-    return df
+
+    try:
+        df = pd.read_parquet(path)
+        df.columns = df.columns.str.strip()
+        return df
+    except Exception as exc:
+        st.error(f"Falha ao ler base de agendamentos: {exc}")
+        st.stop()
 
 
 def get_calendar_dates(df: pd.DataFrame) -> list[date]:

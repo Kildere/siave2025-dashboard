@@ -7,6 +7,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+from src.firebase_client import load_collection_df
 
 BASE_PARQUET = Path("data/processado/base_estrutural_normalizado.parquet")
 GEOJSON_MUN = Path("src/geojs-25-mun.json")
@@ -37,12 +38,21 @@ ALIASES_MUNICIPIOS = {
 }
 
 
-@st.cache_data
-def load_base() -> pd.DataFrame:
+@st.cache_data(show_spinner=False)
+def load_base_estrutural() -> pd.DataFrame:
+    df_fs = load_collection_df("siave_estrutural")
+    if df_fs is not None and not df_fs.empty:
+        return df_fs
+
     if not BASE_PARQUET.exists():
-        st.error("Base processada nao encontrada. Execute o loader primeiro.")
+        st.error("Base estrutural não encontrada. Execute o loader para gerar os dados.")
         st.stop()
-    df = pd.read_parquet(BASE_PARQUET)
+
+    try:
+        df = pd.read_parquet(BASE_PARQUET)
+    except Exception as exc:
+        st.error(f"Falha ao ler o parquet processado: {exc}")
+        st.stop()
     gre_cols = [c for c in df.columns if c.lower() == "gre"]
     if gre_cols:
         df = df.rename(columns={gre_cols[0]: "gRE"})
@@ -232,7 +242,7 @@ st.write(
     """
 )
 
-df_base = load_base()
+df_base = load_base_estrutural()
 geojson_mun = load_geojson(GEOJSON_MUN)
 info_raw, info_norm = load_info_por_cidade()
 

@@ -7,6 +7,7 @@ import plotly.express as px
 import streamlit as st
 
 from src.data_paths import ARQ_TURMAS_GRE
+from src.firebase_client import load_collection_df
 
 SENHA_CORRETA = "A9C3B"
 PENDENTES_PATTERN = "Registros_Pendentes-*.xlsx"
@@ -171,13 +172,30 @@ def localizar_arquivo_padrao() -> Path | None:
 
 
 @st.cache_data(show_spinner=False)
-def carregar_planilha(path: str) -> pd.DataFrame:
-    return pd.read_parquet(path)
+def carregar_planilha(path: str | None) -> pd.DataFrame | None:
+    # 1) Tenta Firestore
+    df_fs = load_collection_df("siave_pendencias")
+    if df_fs is not None and not df_fs.empty:
+        return df_fs
+
+    # 2) Fallback para parquet
+    if path is None:
+        return None
+
+    try:
+        return pd.read_parquet(path)
+    except Exception as exc:
+        st.error(f"Falha ao ler base_registros_pendentes.parquet: {exc}")
+        return None
 
 
 def carregar_df_pendentes(uploaded_file) -> tuple[pd.DataFrame | None, str | None]:
     arquivo_padrao = localizar_arquivo_padrao()
     if arquivo_padrao is None:
+        # mesmo assim tenta Firestore via carregar_planilha(None)
+        df = carregar_planilha(None)
+        if df is not None and not df.empty:
+            return df, None
         st.warning("Nenhum arquivo base_registros_pendentes.parquet foi encontrado em data/processado.")
         return None, None
     try:

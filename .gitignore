@@ -1,22 +1,83 @@
-# Ignorar caches e temporários do Python
+###############################
+# PYTHON – CACHE & TEMPORÁRIOS
+###############################
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
 *.pyo
 *.pyd
-*.pyc
+*.pdb
 
-# Ignorar dados locais do SIAVE
+###############################
+# AMBIENTES VIRTUAIS
+###############################
+.venv/
+venv/
+env/
+ENV/
+.venv*/
+venv*/
+env*/
+
+###############################
+# ARQUIVOS SENSÍVEIS / SEGREDOS
+###############################
+# Credenciais do Firestore (NUNCA subir)
+secrets/
+secrets/*.json
+firebase_key.json
+firestore_key.json
+
+# Segredos do Streamlit local
+.streamlit/secrets.toml
+
+# Variáveis de ambiente
+.env
+.env.*
+
+###############################
+# DADOS SENSÍVEIS DO SIAVE
+###############################
+# (dados reais nunca devem ir para o Git)
 data/origem/
 data/processado/
+data/*
 
-# Ignorar ambiente virtual
-.venv/
-env/
-venv/
+# Planilhas de escolas, agendamentos, presenças, pendências
+*.xlsx
+*.xls
+*.csv
+*.parquet
 
-# Ignorar segredos e variáveis privadas
-.env
-secrets.toml
+###############################
+# CONFIGURAÇÕES LOCAIS
+###############################
+.DS_Store
+Thumbs.db
 
-# Ignorar arquivos do Streamlit local
+###############################
+# CÓDIGOS E ARQUIVOS GERADOS
+###############################
+*.log
+*.tmp
+*.bak
+
+###############################
+# STREAMLIT
+###############################
 .streamlit/
+!/.streamlit/config.toml   # única exceção — config sem dados sensíveis
+
+###############################
+# VS CODE
+###############################
+.vscode/
+*.code-workspace
+
+###############################
+# PYTHON BUILD / DISTRIBUTION
+###############################
+build/
+dist/
+*.egg-info/
+.eggs/

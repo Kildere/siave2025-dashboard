@@ -9,6 +9,7 @@ import pandas as pd
 import streamlit as st
 
 from src.base_estrutural_loader import normalize_col
+from src.firebase_client import save_dataframe
 
 st.set_page_config(page_title="Loader - SIAVE 2025", layout="wide")
 
@@ -451,11 +452,14 @@ def process_bases() -> None:
     df_pendentes = process_base_pendentes(base_paths["pendentes"])
 
     df_estrutural.to_parquet(PROCESSADO_DIR / "base_estrutural.parquet", index=False)
-    df_estrutural_normalizado.to_parquet(PROCESSADO_DIR / "base_estrutural_normalizado.parquet", index=False)
+    df_estrutural_normalizado.to_parquet(
+        PROCESSADO_DIR / "base_estrutural_normalizado.parquet", index=False
+    )
     df_agendamentos.to_parquet(PROCESSADO_DIR / "base_agendamentos.parquet", index=False)
     df_presenca.to_parquet(PROCESSADO_DIR / "base_percentual_presenca.parquet", index=False)
     df_pendentes.to_parquet(PROCESSADO_DIR / "base_registros_pendentes.parquet", index=False)
 
+    # Atualiza estado da sessão para os downloads
     st.session_state["loader_ok"] = True
     st.session_state["arquivos_processados"] = {
         "estrutural": df_estrutural,
@@ -463,6 +467,17 @@ def process_bases() -> None:
         "presenca": df_presenca,
         "pendentes": df_pendentes,
     }
+
+    # Sincroniza com Firestore (não quebra a execução caso falhe)
+    with st.spinner("Sincronizando dados com o Firestore..."):
+        try:
+            save_dataframe("siave_estrutural", df_estrutural_normalizado)
+            save_dataframe("siave_agendamentos", df_agendamentos)
+            save_dataframe("siave_presenca", df_presenca)
+            save_dataframe("siave_pendencias", df_pendentes)
+            st.success("Sincronização com Firestore concluída.")
+        except Exception as exc:
+            st.warning(f"Não foi possível sincronizar com o Firestore: {exc}")
 
 
 def render_upload_tab(title: str, prefix: str, folder: Path, folder_display: str) -> None:

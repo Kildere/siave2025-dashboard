@@ -7,6 +7,7 @@ import streamlit as st
 
 from src.data_paths import ARQ_BASE_AGENDAMENTOS
 from src.utils import format_timestamp_brazil
+from src.firebase_client import load_collection_df
 
 DATA_PROCESSADO = Path("data/processado")
 PRESENCE_PARQUET = DATA_PROCESSADO / "base_percentual_presenca.parquet"
@@ -52,8 +53,30 @@ def load_df(path: Path) -> pd.DataFrame | None:
         return None
 
 
-base_df_raw = load_df(ARQ_BASE_AGENDAMENTOS)
-presence_df_raw = load_df(PRESENCE_PARQUET)
+# Tenta ler do Firestore primeiro
+base_df_raw = load_collection_df("siave_agendamentos")
+presence_df_raw = load_collection_df("siave_presenca")
+
+# Se Firestore vier vazio, usa fallback em parquet
+if base_df_raw is None or base_df_raw.empty:
+    if ARQ_BASE_AGENDAMENTOS.exists():
+        try:
+            base_df_raw = pd.read_parquet(ARQ_BASE_AGENDAMENTOS)
+        except Exception as exc:
+            st.error(f"Falha ao ler base_agendamentos.parquet: {exc}")
+            st.stop()
+    else:
+        base_df_raw = None
+
+if presence_df_raw is None or presence_df_raw.empty:
+    if PRESENCE_PARQUET.exists():
+        try:
+            presence_df_raw = pd.read_parquet(PRESENCE_PARQUET)
+        except Exception as exc:
+            st.error(f"Falha ao ler base_percentual_presenca.parquet: {exc}")
+            st.stop()
+    else:
+        presence_df_raw = None
 
 st.title("Registro de Aplicacoes - Presenca")
 
