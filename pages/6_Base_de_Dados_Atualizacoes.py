@@ -9,7 +9,30 @@ import pandas as pd
 import streamlit as st
 
 from src.base_estrutural_loader import normalize_col
-from src.firebase_client import save_dataframe
+from src.firebase_client import save_dataframe as firestore_save_dataframe
+
+
+def normalize_columns(df):
+    """
+    Converte colunas para:
+    - lowercase
+    - sem acentos
+    - substitui espaços por _
+    - remove caracteres especiais
+    """
+    new_cols = []
+    for col in df.columns:
+        c = unicodedata.normalize("NFKD", col)
+        c = "".join(ch for ch in c if not unicodedata.combining(ch))
+        c = c.lower().replace(" ", "_")
+        c = "".join(ch for ch in c if ch.isalnum() or ch == "_")
+        new_cols.append(c)
+    df.columns = new_cols
+    return df
+
+
+def save_dataframe(df: pd.DataFrame, collection: str, document: str | None = None) -> None:
+    firestore_save_dataframe(collection, df)
 
 st.set_page_config(page_title="Loader - SIAVE 2025", layout="wide")
 
@@ -72,8 +95,10 @@ AGENDAMENTOS_SCHEMA = [
     "uf",
     "polo",
     "coEscolaCenso",
+    "coTurmaCenso",
     "escola",
     "municipio",
+    "turma",
     "serie",
     "turno",
     "tipoAplic",
@@ -211,6 +236,34 @@ def normalizar_string(x) -> Union[str, None]:
     return txt if txt else None
 
 
+def require_columns(df, required, name):
+    missing = [c for c in required if c not in df.columns]
+    if missing:
+        raise ValueError(
+            f"[ERRO LOADER] Base '{name}' está faltando colunas obrigatórias: {missing}"
+        )
+
+
+def validate_all_bases(df_estrutural, df_agendamentos, df_presenca):
+    require_columns(
+        df_estrutural,
+        ["municipio", "polo", "gre", "coescolacenso", "turma", "serie", "turno", "localizacao"],
+        "Estrutural",
+    )
+
+    require_columns(
+        df_agendamentos,
+        ["municipio", "polo", "gre", "coescolacenso", "coturmacenso", "turma", "diaaplicacao", "dataagendamento"],
+        "Agendamentos",
+    )
+
+    require_columns(
+        df_presenca,
+        ["municipio", "polo", "gre", "coescolacenso", "qtdalunospresentes", "qtdalunospresentes", "percentual", "datareal"],
+        "Presenca",
+    )
+
+
 def gerar_bytes_parquet(df: pd.DataFrame) -> bytes:
     buffer = io.BytesIO()
     df.to_parquet(buffer, index=False)
@@ -346,8 +399,10 @@ def process_base_agendamentos(path: Path) -> pd.DataFrame:
     df["uf"] = serie_texto(df_raw, norm_map, ["uf"])
     df["polo"] = serie_texto(df_raw, norm_map, ["polo", "regional"])
     df["coEscolaCenso"] = serie_texto(df_raw, norm_map, ["coescolacenso", "codigoescola"])
+    df["coTurmaCenso"] = serie_texto(df_raw, norm_map, ["coturmacenso", "turmacenso", "codturma", "turma"])
     df["escola"] = serie_texto(df_raw, norm_map, ["escola", "nomeescola"])
     df["municipio"] = serie_texto(df_raw, norm_map, ["municipio", "cidade"]).apply(normalizar_municipio)
+    df["turma"] = serie_texto(df_raw, norm_map, ["turma"])
     df["serie"] = serie_texto(df_raw, norm_map, ["serie", "serieano"])
     df["turno"] = serie_texto(df_raw, norm_map, ["turno"])
     df["tipoAplic"] = serie_texto(df_raw, norm_map, ["tipoaplic", "tipoaplicacao", "aplicacao"])
@@ -451,6 +506,15 @@ def process_bases() -> None:
     df_presenca = process_base_presenca(base_paths["presenca"])
     df_pendentes = process_base_pendentes(base_paths["pendentes"])
 
+    # 1. Normalizar colunas
+    df_estrutural = normalize_columns(df_estrutural)
+    df_agendamentos = normalize_columns(df_agendamentos)
+    df_presenca = normalize_columns(df_presenca)
+    df_pendentes = normalize_columns(df_pendentes)
+
+    # 2. Validar estrutura obrigatória
+    validate_all_bases(df_estrutural, df_agendamentos, df_presenca)
+
     df_estrutural.to_parquet(PROCESSADO_DIR / "base_estrutural.parquet", index=False)
     df_estrutural_normalizado.to_parquet(
         PROCESSADO_DIR / "base_estrutural_normalizado.parquet", index=False
@@ -471,10 +535,14 @@ def process_bases() -> None:
     # Sincroniza com Firestore (não quebra a execução caso falhe)
     with st.spinner("Sincronizando dados com o Firestore..."):
         try:
-            save_dataframe("siave_estrutural", df_estrutural_normalizado)
-            save_dataframe("siave_agendamentos", df_agendamentos)
-            save_dataframe("siave_presenca", df_presenca)
-            save_dataframe("siave_pendencias", df_pendentes)
+            df_estrutural = normalize_columns(df_estrutural)
+            save_dataframe(df_estrutural, "siave_estrutural", "base_estrutural")
+            df_agendamentos = normalize_columns(df_agendamentos)
+            save_dataframe(df_agendamentos, "siave_agendamentos", "base_agendamentos")
+            df_presenca = normalize_columns(df_presenca)
+            save_dataframe(df_presenca, "siave_presenca", "base_percentual_presenca")
+            df_pendentes = normalize_columns(df_pendentes)
+            save_dataframe(df_pendentes, "siave_pendencias", "base_pendencias")
             st.success("Sincronização com Firestore concluída.")
         except Exception as exc:
             st.warning(f"Não foi possível sincronizar com o Firestore: {exc}")
