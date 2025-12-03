@@ -117,16 +117,21 @@ AGENDAMENTOS_SCHEMA = [
 PRESENCA_SCHEMA = [
     "uf",
     "polo",
-    "tipoRede",
-    "localizacao",
     "coEscolaCenso",
     "escola",
+    "municipio",
+    "tipoRede",
+    "localizacao",
+    "diaAplicacao",
     "serie",
+    "tipoAplic",
+    "turno",
+    "coTurmaCenso",
+    "turma",
+    "dataReal",
     "qtdAlunosPrevistos",
     "qtdAlunosPresentes",
     "percentual",
-    "diaAplicacao",
-    "dataReal",
     "gRE",
 ]
 
@@ -259,7 +264,7 @@ def validate_all_bases(df_estrutural, df_agendamentos, df_presenca):
 
     require_columns(
         df_presenca,
-        ["municipio", "polo", "gre", "coescolacenso", "qtdalunospresentes", "qtdalunospresentes", "percentual", "datareal"],
+        PRESENCA_SCHEMA,
         "Presenca",
     )
 
@@ -425,31 +430,106 @@ def process_base_agendamentos(path: Path) -> pd.DataFrame:
     return df.reindex(columns=AGENDAMENTOS_SCHEMA)
 
 
-def process_base_presenca(path: Path) -> pd.DataFrame:
-    df_raw = pd.read_excel(path)
-    norm_map = {normalizar_nome(c): c for c in df_raw.columns}
+def process_base_presenca(df_presence_raw: pd.DataFrame, df_estrutural_norm: pd.DataFrame) -> pd.DataFrame:
+    presence_required_input = [
+        "UF",
+        "Polo",
+        "CoEscolaCenso",
+        "Escola",
+        "MunicipioPolo",
+        "MunicipioEscola",
+        "TipoRede",
+        "Localizacao",
+        "Dia",
+        "Serie",
+        "TipoAplic",
+        "Turno",
+        "CoTurmaCenso",
+        "Turma",
+        "Agendamento",
+        "QtdAlunosPrevistos",
+        "QtdAlunosPresentes",
+        "Percentual",
+    ]
 
-    df = pd.DataFrame(index=df_raw.index)
-    df["uf"] = serie_texto(df_raw, norm_map, ["uf"])
-    df["polo"] = serie_texto(df_raw, norm_map, ["polo", "regional"])
-    df["tipoRede"] = serie_texto(df_raw, norm_map, ["tiporede", "rede"])
-    df["localizacao"] = serie_texto(df_raw, norm_map, ["localizacao", "localidade"])
-    df["coEscolaCenso"] = serie_texto(df_raw, norm_map, ["coescolacenso", "codigoescola"])
-    df["escola"] = serie_texto(df_raw, norm_map, ["escola", "nomeescola"])
-    df["serie"] = serie_texto(df_raw, norm_map, ["serie", "serieano"])
-    df["qtdAlunosPrevistos"] = serie_numero(df_raw, norm_map, ["qtdalunosprevistos", "previstos", "alunosprevistos"])
-    df["qtdAlunosPresentes"] = serie_numero(df_raw, norm_map, ["qtdalunospresentes", "presentes", "alunospresentes"])
-    df["percentual"] = pd.to_numeric(serie_texto(df_raw, norm_map, ["percentual", "porcentagem", "percentualpresenca"]), errors="coerce")
-    df["diaAplicacao"] = serie_texto(df_raw, norm_map, ["diaaplicacao", "diaplicacao", "dia", "dataaplicacao"])
-    df["dataReal"] = serie_data(df_raw, norm_map, ["datareal", "dataaplicacaoreal", "datarealizada"])
-    df["gRE"] = serie_texto(df_raw, norm_map, ["gre"])
+    df_raw = df_presence_raw.copy()
+    df_raw.columns = [str(c).strip() for c in df_raw.columns]
+    if "QtdAlunosPrevistos" not in df_raw.columns and "Alocados" in df_raw.columns:
+        df_raw["QtdAlunosPrevistos"] = df_raw["Alocados"]
+    if "QtdAlunosPresentes" not in df_raw.columns and "Presentes" in df_raw.columns:
+        df_raw["QtdAlunosPresentes"] = df_raw["Presentes"]
 
-    gre_fallback = gre_from_polo(df["polo"])
-    df["gRE"] = df["gRE"].where(~df["gRE"].isna(), gre_fallback)
-    df["gRE"] = df["gRE"].apply(normalizar_gre)
-    df["coEscolaCenso"] = df["coEscolaCenso"].astype("string").str.strip().replace({"": pd.NA})
+    require_columns(df_raw, presence_required_input, "Presenca (entrada)")
 
-    return df.reindex(columns=PRESENCA_SCHEMA)
+    mapeamento = {
+        "UF": "uf",
+        "Polo": "polo",
+        "CoEscolaCenso": "coEscolaCenso",
+        "Escola": "escola",
+        "TipoRede": "tipoRede",
+        "Localizacao": "localizacao",
+        "Dia": "diaAplicacao",
+        "Serie": "serie",
+        "TipoAplic": "tipoAplic",
+        "Turno": "turno",
+        "CoTurmaCenso": "coTurmaCenso",
+        "Turma": "turma",
+        "Agendamento": "dataReal",
+        "QtdAlunosPrevistos": "qtdAlunosPrevistos",
+        "QtdAlunosPresentes": "qtdAlunosPresentes",
+        "Percentual": "percentual",
+    }
+
+    df_presence = df_raw.rename(columns=mapeamento)
+    for col in mapeamento.values():
+        if col not in df_presence.columns:
+            df_presence[col] = pd.NA
+
+    municipio_escola = df_raw.get("MunicipioEscola")
+    municipio_polo = df_raw.get("MunicipioPolo")
+    municipio_base = municipio_escola if municipio_escola is not None else pd.Series(pd.NA, index=df_raw.index)
+    municipio_fallback = municipio_polo if municipio_polo is not None else pd.Series(pd.NA, index=df_raw.index)
+    df_presence["municipio"] = (
+        municipio_base.fillna(municipio_fallback)
+        .astype("string")
+        .str.strip()
+        .str.upper()
+    )
+
+    df_presence["coEscolaCenso"] = df_presence["coEscolaCenso"].astype("string").str.strip().replace({"": pd.NA})
+    df_presence["coTurmaCenso"] = df_presence["coTurmaCenso"].astype("string").str.strip().replace({"": pd.NA})
+    df_presence["diaAplicacao"] = df_presence["diaAplicacao"].astype("string").str.strip()
+    df_presence["turma"] = df_presence["turma"].astype("string").str.strip()
+    df_presence["serie"] = df_presence["serie"].astype("string").str.strip()
+    df_presence["tipoAplic"] = df_presence["tipoAplic"].astype("string").str.strip()
+    df_presence["turno"] = df_presence["turno"].astype("string").str.strip()
+    df_presence["polo"] = df_presence["polo"].astype("string").str.strip()
+    df_presence["uf"] = df_presence["uf"].astype("string").str.strip()
+    df_presence["tipoRede"] = df_presence["tipoRede"].astype("string").str.strip()
+    df_presence["localizacao"] = df_presence["localizacao"].astype("string").str.strip()
+    df_presence["escola"] = df_presence["escola"].astype("string").str.strip()
+
+    df_presence["dataReal"] = pd.to_datetime(df_presence["dataReal"], dayfirst=True, errors="coerce")
+    df_presence["qtdAlunosPrevistos"] = pd.to_numeric(df_presence["qtdAlunosPrevistos"], errors="coerce").fillna(0).astype(int)
+    df_presence["qtdAlunosPresentes"] = pd.to_numeric(df_presence["qtdAlunosPresentes"], errors="coerce").fillna(0).astype(int)
+    df_presence["percentual"] = pd.to_numeric(df_presence["percentual"], errors="coerce")
+
+    df_merge = df_presence.merge(
+        df_estrutural_norm[["coEscolaCenso", "municipio", "gRE"]],
+        on="coEscolaCenso",
+        how="left",
+        suffixes=("", "_estrut"),
+    )
+    if "municipio_estrut" in df_merge.columns:
+        df_merge["municipio"] = df_merge["municipio"].fillna(df_merge["municipio_estrut"])
+        df_merge.drop(columns=["municipio_estrut"], inplace=True)
+    df_merge["municipio"] = df_merge["municipio"].astype("string").str.strip().str.upper()
+
+    if "gRE" in df_merge.columns:
+        df_merge["gRE"] = df_merge["gRE"].astype("string").str.strip()
+
+    df_final = df_merge[PRESENCA_SCHEMA].copy()
+    return df_final
 
 
 def process_base_pendentes(path: Path) -> pd.DataFrame:
@@ -503,13 +583,13 @@ def process_bases() -> None:
 
     df_estrutural, df_estrutural_normalizado = process_base_estrutural(base_paths["estrutural"])
     df_agendamentos = process_base_agendamentos(base_paths["agendamentos"])
-    df_presenca = process_base_presenca(base_paths["presenca"])
+    df_presenca_raw = pd.read_excel(base_paths["presenca"])
+    df_presenca = process_base_presenca(df_presenca_raw, df_estrutural_normalizado)
     df_pendentes = process_base_pendentes(base_paths["pendentes"])
 
-    # 1. Normalizar colunas
+    # 1. Normalizar colunas (preserva presença para o schema final esperado)
     df_estrutural = normalize_columns(df_estrutural)
     df_agendamentos = normalize_columns(df_agendamentos)
-    df_presenca = normalize_columns(df_presenca)
     df_pendentes = normalize_columns(df_pendentes)
 
     # 2. Validar estrutura obrigatória
@@ -535,14 +615,14 @@ def process_bases() -> None:
     # Sincroniza com Firestore (não quebra a execução caso falhe)
     with st.spinner("Sincronizando dados com o Firestore..."):
         try:
-            df_estrutural = normalize_columns(df_estrutural)
-            save_dataframe(df_estrutural, "siave_estrutural", "base_estrutural")
-            df_agendamentos = normalize_columns(df_agendamentos)
-            save_dataframe(df_agendamentos, "siave_agendamentos", "base_agendamentos")
-            df_presenca = normalize_columns(df_presenca)
-            save_dataframe(df_presenca, "siave_presenca", "base_percentual_presenca")
-            df_pendentes = normalize_columns(df_pendentes)
-            save_dataframe(df_pendentes, "siave_pendencias", "base_pendencias")
+            df_estrutural_firestore = normalize_columns(df_estrutural.copy())
+            save_dataframe(df_estrutural_firestore, "siave_estrutural", "base_estrutural")
+            df_agendamentos_firestore = normalize_columns(df_agendamentos.copy())
+            save_dataframe(df_agendamentos_firestore, "siave_agendamentos", "base_agendamentos")
+            df_presenca_firestore = normalize_columns(df_presenca.copy())
+            save_dataframe(df_presenca_firestore, "siave_presenca", "base_percentual_presenca")
+            df_pendentes_firestore = normalize_columns(df_pendentes.copy())
+            save_dataframe(df_pendentes_firestore, "siave_pendencias", "base_pendencias")
             st.success("Sincronização com Firestore concluída.")
         except Exception as exc:
             st.warning(f"Não foi possível sincronizar com o Firestore: {exc}")
